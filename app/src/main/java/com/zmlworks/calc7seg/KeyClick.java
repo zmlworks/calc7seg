@@ -5,13 +5,13 @@ import android.media.AudioAttributes;
 import android.media.SoundPool;
 
 /**
- * Low-latency key sound: three soft "thock" variants (res/raw/key_thock_*.wav, synthesized by
+ * Low-latency key sound: three crisp "kasha" snap variants (res/raw/key_snap_*.wav, synthesized by
  * tools/sound/make_click.py) rotated in a shuffled order with tiny pitch variation, so repeated
  * presses sound like real typing rather than one identical sample.
  */
 final class KeyClick {
-    private static final float VOLUME = 0.5f;
-    private static final int[] RES = {R.raw.key_thock_0, R.raw.key_thock_1, R.raw.key_thock_2};
+    private static final float VOLUME = 0.45f;
+    private static final int[] RES = {R.raw.key_snap_0, R.raw.key_snap_1, R.raw.key_snap_2};
     private final SoundPool pool;
     private final int[] ids = new int[RES.length];
     private final java.util.Random rnd = new java.util.Random();

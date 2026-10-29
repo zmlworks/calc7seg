@@ -74,26 +74,35 @@ final class Lcd {
     }
 
     /**
-     * Chiselled segment polygon (x/y interleaved) for segment s of a digit cell at (l,t) sized w×h,
-     * stroke thickness th, joint gap gap, italic slant (dx per unit of height above bottom).
-     * Outer segments are mitred at 45° so the digit has square outer corners; the vertical
-     * segments meet the middle bar in sharp points (classic hexagonal/trapezoidal LCD shapes).
+     * Hexagonal segment polygon (6 points, x/y interleaved) for segment s of a digit cell at (l,t)
+     * sized w×h, stroke thickness th, end gap gap, italic slant (dx per unit of height above bottom).
      */
     static float[] segment(int s, float l, float t, float w, float h, float th, float gap, float slant) {
-        float r = l + w, b = t + h, ym = t + h / 2, hm = th / 2, g = gap;
+        float x0 = l + th / 2, x1 = l + w - th / 2;
+        float y0 = t + th / 2, ym = t + h / 2, y1 = t + h - th / 2;
         float[] p;
         switch (s) {
-            case 0: p = new float[]{l + g, t, r - g, t, r - th - g, t + th, l + th + g, t + th}; break;
-            case 3: p = new float[]{l + th + g, b - th, r - th - g, b - th, r - g, b, l + g, b}; break;
-            case 6: p = new float[]{l + hm + g, ym, l + th + g, ym - hm, r - th - g, ym - hm,
-                    r - hm - g, ym, r - th - g, ym + hm, l + th + g, ym + hm}; break;
-            case 5: p = new float[]{l, t + g, l + th, t + th + g, l + th, ym - hm - g, l + hm, ym - g, l, ym - hm - g}; break;
-            case 4: p = new float[]{l, ym + hm + g, l + hm, ym + g, l + th, ym + hm + g, l + th, b - th - g, l, b - g}; break;
-            case 1: p = new float[]{r, t + g, r, ym - hm - g, r - hm, ym - g, r - th, ym - hm - g, r - th, t + th + g}; break;
-            default: p = new float[]{r, ym + hm + g, r, b - g, r - th, b - th - g, r - th, ym + hm + g, r - hm, ym + g}; break; // c
+            case 0: p = horiz(x0, x1, y0, th, gap); break;
+            case 6: p = horiz(x0, x1, ym, th, gap); break;
+            case 3: p = horiz(x0, x1, y1, th, gap); break;
+            case 5: p = vert(x0, y0, ym, th, gap); break;
+            case 1: p = vert(x1, y0, ym, th, gap); break;
+            case 4: p = vert(x0, ym, y1, th, gap); break;
+            default: p = vert(x1, ym, y1, th, gap); break; // c
         }
-        for (int i = 0; i < p.length; i += 2) p[i] += (b - p[i + 1]) * slant;
+        float bottom = t + h;
+        for (int i = 0; i < p.length; i += 2) p[i] += (bottom - p[i + 1]) * slant;
         return p;
+    }
+
+    private static float[] horiz(float x0, float x1, float y, float th, float gap) {
+        float a = x0 + gap, b = x1 - gap, r = th / 2;
+        return new float[]{a, y, a + r, y - r, b - r, y - r, b, y, b - r, y + r, a + r, y + r};
+    }
+
+    private static float[] vert(float x, float y0, float y1, float th, float gap) {
+        float a = y0 + gap, b = y1 - gap, r = th / 2;
+        return new float[]{x, a, x + r, a + r, x + r, b - r, x, b, x - r, b - r, x - r, a + r};
     }
 
     // ------------------------------------------------------------------ rendering (shared)
@@ -142,11 +151,17 @@ final class Lcd {
             pitch = cellW * 1.32f;
             cellH = cellW * aspect;
             th = cellW * thick;
-            gap = th * 0.13f;
+            gap = th * 0.11f;
             signW = cellW * 0.9f;
             dpR = th * 0.55f;
             left = right - (signW + CELLS * pitch) + (pitch - cellW) * 0.1f;
         }
+
+        /** Decimal point centre: sits a little below the digit baseline, like a real LCD. */
+        float dotY() { return top + cellH - dpR * 0.35f; }
+
+        /** Thousands tick top: raised a little above the digit tops. */
+        float tickTop() { return top - cellH * 0.07f; }
 
         static float unitsWide() { return 0.9f + CELLS * 1.32f; }
     }
@@ -231,10 +246,9 @@ final class Lcd {
                 p.poly(pt, GHOST);
                 if ((f.seg[i] & (1 << sg)) != 0) p.poly(pt, ON);
             }
-            float gx = l + d.cellW + (d.pitch - d.cellW) * 0.56f, q = d.dpR * 0.78f;  // square dot, clear of the c/d corner
-            float yb = d.top + d.cellH;
-            p.poly(new float[]{gx - q, yb - 2 * q, gx + q, yb - 2 * q, gx + q, yb, gx - q, yb}, f.dp[i] ? ON : GHOST);
-            if (i < CELLS - 1) p.poly(tick(gx + d.cellH * d.slant, d.top, d), f.sep[i] ? ON : GHOST);
+            float gx = l + d.cellW + (d.pitch - d.cellW) * 0.45f;   // gap centre at the baseline
+            p.circle(gx - (d.dotY() - d.top - d.cellH) * d.slant, d.dotY(), d.dpR, f.dp[i] ? ON : GHOST);
+            if (i < CELLS - 1) p.poly(tick(gx + (d.top + d.cellH - d.tickTop()) * d.slant, d.tickTop(), d), f.sep[i] ? ON : GHOST);
         }
     }
 

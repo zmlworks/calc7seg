@@ -363,20 +363,31 @@ public class CalculatorTest {
         assertEquals(java.util.EnumSet.allOf(Calculator.Key.class).size(), new java.util.HashSet<>(java.util.Arrays.asList(KeyLayout.KEYS)).size());
     }
 
-    @Test public void segmentsAreConvexAndSquareCornered() {
+    @Test public void segmentsAreHexagonsInsideTheCell() {
         Lcd.Digits d = new Lcd.Digits(1000, 0, 100, 2.15f, 0.27f);
         for (int sg = 0; sg < 7; sg++) {
             float[] p = Lcd.segment(sg, 0, 0, 100, 215, d.th, d.gap, 0);
-            assertTrue(p.length >= 8);
-            for (int i = 0; i < p.length; i += 2) {                // inside the cell
+            assertEquals(12, p.length);                              // 0.2/0.3 hexagonal style
+            for (int i = 0; i < p.length; i += 2) {
                 assertTrue(p[i] >= -0.01f && p[i] <= 100.01f);
                 assertTrue(p[i + 1] >= -0.01f && p[i + 1] <= 215.01f);
             }
         }
-        float[] a = Lcd.segment(0, 0, 0, 100, 215, d.th, d.gap, 0);
-        assertEquals(0f, a[1], 1e-4);                                // flat outer edge on the top line
-        assertEquals(0f, a[3], 1e-4);
-        assertEquals(100 - 2 * d.gap, a[2] - a[0], 1e-3);            // runs (almost) corner to corner
+    }
+
+    @Test public void dotLowTickHigh() {
+        for (float w : new float[]{400, 1080}) {
+            Lcd.Metrics m = new Lcd.Metrics(w);
+            Lcd.Digits d = m.d;
+            float base = d.top + d.cellH;
+            assertTrue(d.dotY() > base - d.dpR);                     // lower than 0.3/0.4 (bottom-aligned)
+            assertTrue(d.dotY() + d.dpR < m.height);                 // still on the glass
+            assertTrue(d.tickTop() < d.top);                         // raised above the digit tops
+            assertTrue(d.tickTop() > m.annTop + m.annS / 2 + m.annS * 0.58f); // below the operator blocks
+            Lcd.MemMetrics mm = new Lcd.MemMetrics(w * 0.6f);
+            assertTrue(mm.d.tickTop() > 0);
+            assertTrue(mm.d.dotY() + mm.d.dpR < mm.height);
+        }
     }
 
     @Test public void settingsDefaultsAndPersistence() {
