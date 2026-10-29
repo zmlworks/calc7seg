@@ -4,23 +4,36 @@ import android.content.Context;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 
-/** Low-latency key click (res/raw/key_click.wav, synthesized by tools/sound/make_click.py). */
+/**
+ * Low-latency key sound: three soft "thock" variants (res/raw/key_thock_*.wav, synthesized by
+ * tools/sound/make_click.py) rotated in a shuffled order with tiny pitch variation, so repeated
+ * presses sound like real typing rather than one identical sample.
+ */
 final class KeyClick {
-    private static final float VOLUME = 0.32f;
+    private static final float VOLUME = 0.5f;
+    private static final int[] RES = {R.raw.key_thock_0, R.raw.key_thock_1, R.raw.key_thock_2};
     private final SoundPool pool;
-    private final int id;
-    private volatile boolean loaded;
+    private final int[] ids = new int[RES.length];
+    private final java.util.Random rnd = new java.util.Random();
+    private volatile int loaded;
+    private int last = -1;
 
     KeyClick(Context c) {
         pool = new SoundPool.Builder().setMaxStreams(4).setAudioAttributes(new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
-        pool.setOnLoadCompleteListener((p, sid, status) -> loaded = status == 0);
-        id = pool.load(c, R.raw.key_click, 1);
+        pool.setOnLoadCompleteListener((p, sid, status) -> { if (status == 0) loaded++; });
+        for (int i = 0; i < RES.length; i++) ids[i] = pool.load(c, RES[i], 1);
     }
 
     void play() {
-        if (loaded) pool.play(id, VOLUME, VOLUME, 1, 0, 1f);
+        if (loaded < RES.length) return;
+        int k = rnd.nextInt(RES.length - 1);
+        if (last >= 0 && k >= last) k++;            // never the same variant twice in a row
+        if (last < 0) k = rnd.nextInt(RES.length);
+        last = k;
+        float rate = 0.97f + rnd.nextFloat() * 0.06f;  // ±3 % pitch
+        pool.play(ids[k], VOLUME, VOLUME, 1, 0, rate);
     }
 
     void release() { pool.release(); }

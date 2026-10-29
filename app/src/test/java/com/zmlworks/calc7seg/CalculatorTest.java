@@ -302,12 +302,81 @@ public class CalculatorTest {
     @Test public void annunciatorsDoNotOverlapDigitsOrE() {
         for (float w : new float[]{400, 1000, 1440}) {
             Lcd.Metrics m = new Lcd.Metrics(w);
-            float annBottom = m.annTop + m.annS;
-            assertTrue(annBottom < m.d.top);                       // above the digits
-            float lastRight = m.annLeft + 3 * m.annPitch + m.annS;
-            assertTrue(lastRight < m.eX - m.eSize * 0.4f);         // left of E
+            float hb = m.annS * 0.58f;                              // inverted block half-size
+            float cy = m.annTop + m.annS / 2;
+            assertTrue(cy + hb < m.d.top);                          // above the digits
+            assertTrue(m.annTop + m.annS / 2 - hb > 0);
+            float c0 = m.annLeft + m.annS / 2;
+            for (int i = 0; i < 3; i++)                             // blocks don't touch each other
+                assertTrue(c0 + i * m.annPitch + hb < c0 + (i + 1) * m.annPitch - hb);
+            float lastRight = c0 + 3 * m.annPitch + hb;
+            assertTrue(lastRight + m.eSize * 0.8f < m.eX - m.eSize * 0.4f); // clear gap before E
             assertTrue(m.eX + m.eSize < w);
         }
+    }
+
+    @Test public void cutOutColourMatchesLcdGradient() {
+        assertEquals(Lcd.BG_TOP, Lcd.bgAt(0));
+        assertEquals(Lcd.BG_BOTTOM, Lcd.bgAt(1));
+        assertEquals(Lcd.BG_TOP, Lcd.bgAt(-0.5f));
+    }
+
+    @Test public void thousandsSeparators() {
+        assertEquals("0.", Lcd.grouped("0."));
+        assertEquals("999.", Lcd.grouped("999."));
+        assertEquals("1'000.", Lcd.grouped("1000."));
+        assertEquals("12'345.", Lcd.grouped("12345."));
+        assertEquals("1'234'567.89", Lcd.grouped("1234567.89"));
+        assertEquals("9'999'999'999.", Lcd.grouped("9999999999."));
+        assertEquals("-123'456.", Lcd.grouped("-123456."));
+        assertEquals("1'234.5678", Lcd.grouped("1234.5678"));      // never right of the point
+        assertEquals("0.123456789", Lcd.grouped("0.123456789"));
+        assertEquals("12'345", Lcd.grouped("12345"));              // no point: count from the right
+        // cell positions: "1234567.89" (9 digits) right-aligned in 10 cells -> cells 1..9, point on cell 7
+        Lcd.Frame f = Lcd.layout("1234567.89");
+        boolean[] want = new boolean[Lcd.CELLS];
+        want[1] = true; want[4] = true;                          // after "1" and after "4"
+        assertArrayEquals(want, f.sep);
+        // grouping is purely visual: engine value unchanged
+        Calculator x = new Calculator();
+        x.keys("1234567");
+        assertEquals("1234567.", x.display());
+        assertEquals("1'234'567.", Lcd.grouped(x.display()));
+        Calculator mc = new Calculator();
+        mc.keys("1234[M_PLUS]");
+        assertEquals("1'234.", Lcd.grouped(mc.memoryDisplay()));
+    }
+
+    @Test public void keyLayout() {
+        assertEquals(4, KeyLayout.COLUMNS);
+        assertEquals(7, KeyLayout.rows());
+        assertEquals(KeyLayout.KEYS.length, KeyLayout.LABELS.length);
+        String[] rows = {"MC MR M- M+", "1/x Ans. CA CE", "BS √ +/- ÷", "7 8 9 ×", "4 5 6 −", "1 2 3 +", "0 00 . ="};
+        for (int r = 0; r < rows.length; r++)
+            assertEquals(rows[r], String.join(" ", java.util.Arrays.copyOfRange(KeyLayout.LABELS, r * 4, r * 4 + 4)));
+        Calculator.Key[] digitsRow4 = {Calculator.Key.D7, Calculator.Key.D8, Calculator.Key.D9, Calculator.Key.MUL};
+        Calculator.Key[] digitsRow6 = {Calculator.Key.D1, Calculator.Key.D2, Calculator.Key.D3, Calculator.Key.ADD};
+        assertArrayEquals(digitsRow4, java.util.Arrays.copyOfRange(KeyLayout.KEYS, 12, 16));
+        assertEquals(Calculator.Key.SUB, KeyLayout.KEYS[19]);
+        assertArrayEquals(digitsRow6, java.util.Arrays.copyOfRange(KeyLayout.KEYS, 20, 24));
+        assertEquals(Calculator.Key.EQ, KeyLayout.KEYS[27]);
+        assertEquals(java.util.EnumSet.allOf(Calculator.Key.class).size(), new java.util.HashSet<>(java.util.Arrays.asList(KeyLayout.KEYS)).size());
+    }
+
+    @Test public void segmentsAreConvexAndSquareCornered() {
+        Lcd.Digits d = new Lcd.Digits(1000, 0, 100, 2.15f, 0.27f);
+        for (int sg = 0; sg < 7; sg++) {
+            float[] p = Lcd.segment(sg, 0, 0, 100, 215, d.th, d.gap, 0);
+            assertTrue(p.length >= 8);
+            for (int i = 0; i < p.length; i += 2) {                // inside the cell
+                assertTrue(p[i] >= -0.01f && p[i] <= 100.01f);
+                assertTrue(p[i + 1] >= -0.01f && p[i + 1] <= 215.01f);
+            }
+        }
+        float[] a = Lcd.segment(0, 0, 0, 100, 215, d.th, d.gap, 0);
+        assertEquals(0f, a[1], 1e-4);                                // flat outer edge on the top line
+        assertEquals(0f, a[3], 1e-4);
+        assertEquals(100 - 2 * d.gap, a[2] - a[0], 1e-3);            // runs (almost) corner to corner
     }
 
     @Test public void settingsDefaultsAndPersistence() {

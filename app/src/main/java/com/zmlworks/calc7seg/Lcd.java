@@ -18,6 +18,8 @@ final class Lcd {
     static final class Frame {
         final int[] seg = new int[CELLS];
         final boolean[] dp = new boolean[CELLS];
+        /** sep[i]: thousands tick in the gap to the right of cell i (top of the gap). */
+        final boolean[] sep = new boolean[CELLS];
         boolean neg;
     }
 
@@ -36,39 +38,62 @@ final class Lcd {
                 cell--;
             }
         }
+        markGroups(f);
         return f;
     }
 
     /**
-     * Hexagonal segment polygon (6 points, x/y interleaved) for segment s of a digit cell at (l,t)
-     * sized w×h, stroke thickness th, end gap gap, italic slant (dx per unit of height above bottom).
+     * Thousands ticks: counting integer digits leftwards from the decimal point, a tick goes after
+     * every 3rd digit if a further integer digit follows to its left ("1'234'567.89").
+     */
+    static void markGroups(Frame f) {
+        int point = -1;                       // cell holding the last integer digit
+        for (int i = 0; i < CELLS; i++) if (f.dp[i]) { point = i; break; }
+        if (point < 0) point = CELLS - 1;     // no point shown: integer ends at the right edge
+        int first = 0;                        // leftmost lit cell (leading blanks are 0 masks)
+        while (first < point && f.seg[first] == 0) first++;
+        for (int r = 3; point - r >= first; r += 3) f.sep[point - r] = true;
+    }
+
+    /** Separator positions as text, for tests and accessibility: "1'234'567.89". */
+    static String grouped(String text) {
+        Frame f = layout(text);
+        StringBuilder b = new StringBuilder();
+        if (f.neg) b.append('-');
+        boolean started = false;
+        for (int i = 0; i < CELLS; i++) {
+            if (f.seg[i] == 0 && !started && !f.dp[i]) continue;
+            started = true;
+            int d = -1;
+            for (int k = 0; k < 10; k++) if (DIGIT[k] == f.seg[i]) d = k;
+            b.append(d < 0 ? ' ' : (char) ('0' + d));
+            if (f.dp[i]) b.append('.');
+            if (f.sep[i]) b.append('\'');
+        }
+        return b.toString();
+    }
+
+    /**
+     * Chiselled segment polygon (x/y interleaved) for segment s of a digit cell at (l,t) sized w×h,
+     * stroke thickness th, joint gap gap, italic slant (dx per unit of height above bottom).
+     * Outer segments are mitred at 45° so the digit has square outer corners; the vertical
+     * segments meet the middle bar in sharp points (classic hexagonal/trapezoidal LCD shapes).
      */
     static float[] segment(int s, float l, float t, float w, float h, float th, float gap, float slant) {
-        float x0 = l + th / 2, x1 = l + w - th / 2;
-        float y0 = t + th / 2, ym = t + h / 2, y1 = t + h - th / 2;
+        float r = l + w, b = t + h, ym = t + h / 2, hm = th / 2, g = gap;
         float[] p;
         switch (s) {
-            case 0: p = horiz(x0, x1, y0, th, gap); break;
-            case 6: p = horiz(x0, x1, ym, th, gap); break;
-            case 3: p = horiz(x0, x1, y1, th, gap); break;
-            case 5: p = vert(x0, y0, ym, th, gap); break;
-            case 1: p = vert(x1, y0, ym, th, gap); break;
-            case 4: p = vert(x0, ym, y1, th, gap); break;
-            default: p = vert(x1, ym, y1, th, gap); break; // c
+            case 0: p = new float[]{l + g, t, r - g, t, r - th - g, t + th, l + th + g, t + th}; break;
+            case 3: p = new float[]{l + th + g, b - th, r - th - g, b - th, r - g, b, l + g, b}; break;
+            case 6: p = new float[]{l + hm + g, ym, l + th + g, ym - hm, r - th - g, ym - hm,
+                    r - hm - g, ym, r - th - g, ym + hm, l + th + g, ym + hm}; break;
+            case 5: p = new float[]{l, t + g, l + th, t + th + g, l + th, ym - hm - g, l + hm, ym - g, l, ym - hm - g}; break;
+            case 4: p = new float[]{l, ym + hm + g, l + hm, ym + g, l + th, ym + hm + g, l + th, b - th - g, l, b - g}; break;
+            case 1: p = new float[]{r, t + g, r, ym - hm - g, r - hm, ym - g, r - th, ym - hm - g, r - th, t + th + g}; break;
+            default: p = new float[]{r, ym + hm + g, r, b - g, r - th, b - th - g, r - th, ym + hm + g, r - hm, ym + g}; break; // c
         }
-        float bottom = t + h;
-        for (int i = 0; i < p.length; i += 2) p[i] += (bottom - p[i + 1]) * slant;
+        for (int i = 0; i < p.length; i += 2) p[i] += (b - p[i + 1]) * slant;
         return p;
-    }
-
-    private static float[] horiz(float x0, float x1, float y, float th, float gap) {
-        float a = x0 + gap, b = x1 - gap, r = th / 2;
-        return new float[]{a, y, a + r, y - r, b - r, y - r, b, y, b - r, y + r, a + r, y + r};
-    }
-
-    private static float[] vert(float x, float y0, float y1, float th, float gap) {
-        float a = y0 + gap, b = y1 - gap, r = th / 2;
-        return new float[]{x, a, x + r, a + r, x + r, b - r, x, b, x - r, b - r, x - r, a + r};
     }
 
     // ------------------------------------------------------------------ rendering (shared)
@@ -117,7 +142,7 @@ final class Lcd {
             pitch = cellW * 1.32f;
             cellH = cellW * aspect;
             th = cellW * thick;
-            gap = th * 0.11f;
+            gap = th * 0.13f;
             signW = cellW * 0.9f;
             dpR = th * 0.55f;
             left = right - (signW + CELLS * pitch) + (pitch - cellW) * 0.1f;
@@ -143,13 +168,13 @@ final class Lcd {
             float cellW = iw / Digits.unitsWide();
             annS = cellW * 0.62f;                       // annunciator square
             annTop = pad * 0.85f;
-            annPitch = annS * 1.55f;
+            annPitch = annS * 1.45f;
             annLeft = pad * 1.3f;
             float top = annTop + annS + annS * 0.45f;
             d = new Digits(width - pad, top, cellW, 2.15f, 0.27f);
             height = top + d.cellH + pad;
             eSize = annS * 1.05f;
-            eX = annLeft + 4 * annPitch + eSize * 0.9f;
+            eX = annLeft + 4 * annPitch + eSize * 1.9f;   // clear gap after the ÷ block
             eBase = annTop + annS / 2 + eSize * 0.36f;
         }
     }
@@ -172,10 +197,25 @@ final class Lcd {
         int lit = opIndex(s.op);
         for (int i = 0; i < OPS.length(); i++) {
             float cx = m.annLeft + i * m.annPitch + m.annS / 2, cy = m.annTop + m.annS / 2;
-            for (float[] poly : opSymbol(OPS.charAt(i), cx, cy, m.annS)) p.poly(poly, i == lit ? ON : GHOST);
+            // inverted annunciator: dark block with the symbol cut out (LCD background shows through)
+            float hb = m.annS * 0.58f;
+            p.poly(new float[]{cx - hb, cy - hb, cx + hb, cy - hb, cx + hb, cy + hb, cx - hb, cy + hb}, i == lit ? ON : GHOST);
+            int bg = bgAt(cy / m.height);
+            for (float[] poly : opSymbol(OPS.charAt(i), cx, cy, m.annS * 0.8f)) p.poly(poly, bg);
         }
         p.text("E", m.eX, m.eBase, m.eSize, s.error ? ON : GHOST);
         digits(p, layout(s.main), m.d);
+    }
+
+    /** LCD background colour at relative height f (matches the vertical BG_TOP→BG_BOTTOM gradient). */
+    static int bgAt(float f) {
+        f = Math.max(0, Math.min(1, f));
+        int c = 0xFF000000;
+        for (int sh = 0; sh <= 16; sh += 8) {
+            int a = (BG_TOP >> sh) & 0xFF, b = (BG_BOTTOM >> sh) & 0xFF;
+            c |= Math.round(a + (b - a) * f) << sh;
+        }
+        return c;
     }
 
     static void renderMemory(Painter p, MemMetrics m, String mem) {
@@ -191,8 +231,18 @@ final class Lcd {
                 p.poly(pt, GHOST);
                 if ((f.seg[i] & (1 << sg)) != 0) p.poly(pt, ON);
             }
-            p.circle(l + d.cellW + (d.pitch - d.cellW) * 0.45f, d.top + d.cellH - d.dpR, d.dpR, f.dp[i] ? ON : GHOST);
+            float gx = l + d.cellW + (d.pitch - d.cellW) * 0.56f, q = d.dpR * 0.78f;  // square dot, clear of the c/d corner
+            float yb = d.top + d.cellH;
+            p.poly(new float[]{gx - q, yb - 2 * q, gx + q, yb - 2 * q, gx + q, yb, gx - q, yb}, f.dp[i] ? ON : GHOST);
+            if (i < CELLS - 1) p.poly(tick(gx + d.cellH * d.slant, d.top, d), f.sep[i] ? ON : GHOST);
         }
+    }
+
+    /** Thousands tick: a short wedge at the top of the inter-digit gap, slanted like the digits. */
+    static float[] tick(float cx, float top, Digits d) {
+        float len = d.cellH * 0.2f, wTop = d.th * 0.3f, wBot = d.th * 0.13f, k = d.slant;
+        float y0 = top, y1 = top + len;
+        return new float[]{cx - wTop, y0, cx + wTop, y0, cx + wBot - len * k, y1, cx - wBot - len * k, y1};
     }
 
     /** + - × ÷ as polygons centred in a box of side s. */

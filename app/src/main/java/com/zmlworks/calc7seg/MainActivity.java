@@ -26,17 +26,6 @@ public final class MainActivity extends Activity {
     private Settings settings;
     private KeyClick click;
 
-    /** Key grid, top to bottom, exactly 4 columns (owner's layout; digits 1-2-3 on top). */
-    private static final Object[][] ROWS = {
-            {"MC", Calculator.Key.MC}, {"MR", Calculator.Key.MR}, {"M-", Calculator.Key.M_MINUS}, {"M+", Calculator.Key.M_PLUS},
-            {"1/x", Calculator.Key.RECIP}, {"Ans.", Calculator.Key.ANS}, {"CA", Calculator.Key.CA}, {"CE", Calculator.Key.CE},
-            {"BS", Calculator.Key.BS}, {"√", Calculator.Key.SQRT}, {"+/-", Calculator.Key.NEG}, {"÷", Calculator.Key.DIV},
-            {"1", Calculator.Key.D1}, {"2", Calculator.Key.D2}, {"3", Calculator.Key.D3}, {"×", Calculator.Key.MUL},
-            {"4", Calculator.Key.D4}, {"5", Calculator.Key.D5}, {"6", Calculator.Key.D6}, {"−", Calculator.Key.SUB},
-            {"7", Calculator.Key.D7}, {"8", Calculator.Key.D8}, {"9", Calculator.Key.D9}, {"+", Calculator.Key.ADD},
-            {"0", Calculator.Key.D0}, {"00", Calculator.Key.D00}, {".", Calculator.Key.DOT}, {"=", Calculator.Key.EQ},
-    };
-
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         String st = saved != null ? saved.getString("calc") : null;
@@ -81,15 +70,16 @@ public final class MainActivity extends Activity {
         pad4.setOrientation(LinearLayout.VERTICAL);
         View.OnClickListener onClick = v -> onKey(((KeyView) v).key);
         KeyView.Feedback feedback = this::keyFeedback;
-        for (int row = 0; row < ROWS.length / 4; row++) {
+        for (int row = 0; row < KeyLayout.rows(); row++) {
             LinearLayout line = new LinearLayout(this);
             line.setOrientation(LinearLayout.HORIZONTAL);
             for (int col = 0; col < 4; col++) {
-                Object[] k = ROWS[row * 4 + col];
-                KeyView kv = makeKey((String) k[0], (Calculator.Key) k[1]);
+                int idx = row * KeyLayout.COLUMNS + col;
+                Calculator.Key key = KeyLayout.KEYS[idx];
+                KeyView kv = makeKey(KeyLayout.LABELS[idx], key);
                 kv.setOnClickListener(onClick);
                 kv.setFeedback(feedback);
-                if (k[1] == Calculator.Key.EQ) {
+                if (key == Calculator.Key.EQ) {
                     // long-press "=" opens settings; a consumed long press suppresses the click (no compute)
                     kv.setOnLongClickListener(v -> {
                         if (settings.vibration()) v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);

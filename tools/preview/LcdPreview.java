@@ -21,7 +21,7 @@ public class LcdPreview implements Lcd.Painter {
 
     public static void main(String[] a) throws Exception {
         String dir = a.length > 0 ? a[0] : ".";
-        String[] scripts = {"", "[CA]1234[M_PLUS]567+89", "[CA][MC]8-", "[CA]7[RECIP]", "[CA]2.5[NEG]*", "[CA]100/8-", "[CA]9999999999*9="};
+        String[] scripts = {"", "[CA]1234[M_PLUS]567+89", "[CA][MC]1234567[M_PLUS]1234567.89/", "[CA][MC]8-", "[CA]7[RECIP]", "[CA]2.5[NEG]*", "[CA]100/8-", "[CA]9999999999*9="};
         int w = 1000;
         Lcd.Metrics m = new Lcd.Metrics(w);
         int h = Math.round(m.height);
