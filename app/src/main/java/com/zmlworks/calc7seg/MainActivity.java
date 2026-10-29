@@ -1,13 +1,16 @@
 package com.zmlworks.calc7seg;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
@@ -19,7 +22,9 @@ public final class MainActivity extends Activity {
     private static final int EQL = 0xFF8E959E, EQL_T = 0xFFFFFFFF;
 
     private final Calculator calc = new Calculator();
-    private LcdView lcd;
+    private LcdView lcd, memLcd;
+    private Settings settings;
+    private KeyClick click;
 
     /** Key grid, top to bottom, exactly 4 columns (owner's layout; digits 1-2-3 on top). */
     private static final Object[][] ROWS = {
@@ -44,39 +49,54 @@ public final class MainActivity extends Activity {
         int pad = Ui.dp(this, 12);
         root.setPadding(pad, pad, pad, pad);
 
-        TextView brand = new TextView(this);
-        brand.setText("ZML  ·  10 DIGITS");
-        brand.setTextColor(0xFF9A9EA6);
-        brand.setTextSize(11);
-        brand.setLetterSpacing(0.18f);
-        brand.setGravity(Gravity.END);
-        brand.setPadding(0, 0, Ui.dp(this, 6), Ui.dp(this, 6));
-        root.addView(brand, new LinearLayout.LayoutParams(-1, -2));
+        settings = Settings.of(getSharedPreferences("settings", MODE_PRIVATE));
+        click = new KeyClick(this);
 
-        FrameLayout bezel = new FrameLayout(this);
-        GradientDrawable bz = new GradientDrawable();
-        bz.setColor(0xFF15161A);
-        bz.setCornerRadius(Ui.dp(this, 10));
-        bz.setStroke(Ui.dp(this, 1), 0xFF0A0A0C);
-        bezel.setBackground(bz);
-        int bp = Ui.dp(this, 9);
-        bezel.setPadding(bp, bp, bp, bp);
-        lcd = new LcdView(this);
-        bezel.addView(lcd, new FrameLayout.LayoutParams(-1, -2));
+        // top strip: printed brand / "MEMORY" on the body, memory value on its own small LCD panel
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.BOTTOM);
+        LinearLayout printed = new LinearLayout(this);
+        printed.setOrientation(LinearLayout.VERTICAL);
+        printed.addView(printedText("ZML", 13, 0.25f, Gravity.START), new LinearLayout.LayoutParams(-1, -2));
+        printed.addView(printedText("10 DIGITS", 9, 0.2f, Gravity.START), new LinearLayout.LayoutParams(-1, -2));
+        View spacer = new View(this);
+        printed.addView(spacer, new LinearLayout.LayoutParams(-1, 0, 1));
+        printed.addView(printedText("MEMORY", 9, 0.22f, Gravity.END), new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, -1, 0.4f);
+        plp.rightMargin = Ui.dp(this, 8);
+        top.addView(printed, plp);
+        memLcd = new LcdView(this, true);
+        top.addView(bezel(memLcd, 6, 7), new LinearLayout.LayoutParams(0, -2, 0.6f));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-1, -2);
+        tlp.bottomMargin = Ui.dp(this, 10);
+        root.addView(top, tlp);
+
+        lcd = new LcdView(this, false);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, -2);
         blp.bottomMargin = Ui.dp(this, 14);
-        root.addView(bezel, blp);
+        root.addView(bezel(lcd, 9, 10), blp);
 
         LinearLayout pad4 = new LinearLayout(this);
         pad4.setOrientation(LinearLayout.VERTICAL);
-        View.OnClickListener click = v -> onKey(((KeyView) v).key);
+        View.OnClickListener onClick = v -> onKey(((KeyView) v).key);
+        KeyView.Feedback feedback = this::keyFeedback;
         for (int row = 0; row < ROWS.length / 4; row++) {
             LinearLayout line = new LinearLayout(this);
             line.setOrientation(LinearLayout.HORIZONTAL);
             for (int col = 0; col < 4; col++) {
                 Object[] k = ROWS[row * 4 + col];
                 KeyView kv = makeKey((String) k[0], (Calculator.Key) k[1]);
-                kv.setOnClickListener(click);
+                kv.setOnClickListener(onClick);
+                kv.setFeedback(feedback);
+                if (k[1] == Calculator.Key.EQ) {
+                    // long-press "=" opens settings; a consumed long press suppresses the click (no compute)
+                    kv.setOnLongClickListener(v -> {
+                        if (settings.vibration()) v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        showSettings();
+                        return true;
+                    });
+                }
                 line.addView(kv, new LinearLayout.LayoutParams(0, -1, 1));
             }
             // memory / func rows a bit shorter, like real calculators
@@ -87,6 +107,71 @@ public final class MainActivity extends Activity {
         setContentView(root);
         Ui.edgeToEdge(this, root);
         refresh();
+    }
+
+    private TextView printedText(String s, float sp, float spacing, int gravity) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextColor(0xFF9A9EA6);
+        t.setTextSize(sp);
+        t.setLetterSpacing(spacing);
+        t.setGravity(gravity);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        return t;
+    }
+
+    private FrameLayout bezel(View lcdView, int padDp, int radiusDp) {
+        FrameLayout bezel = new FrameLayout(this);
+        GradientDrawable bz = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xFF0F1013, 0xFF1C1D21});
+        bz.setCornerRadius(Ui.dp(this, radiusDp));
+        bz.setStroke(Ui.dp(this, 1), 0xFF3A3C41);
+        bezel.setBackground(bz);
+        int bp = Ui.dp(this, padDp);
+        bezel.setPadding(bp, bp, bp, bp);
+        bezel.addView(lcdView, new FrameLayout.LayoutParams(-1, -2));
+        return bezel;
+    }
+
+    private void keyFeedback(View v) {
+        if (settings.sound()) click.play();
+        if (settings.vibration()) v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+    }
+
+    private void showSettings() {
+        int pad = Ui.dp(this, 20);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(pad, Ui.dp(this, 8), pad, 0);
+        Switch vib = settingSwitch("バイブレーション", settings.vibration());
+        vib.setOnCheckedChangeListener((b, on) -> settings.setVibration(on));
+        Switch snd = settingSwitch("キー音", settings.sound());
+        snd.setOnCheckedChangeListener((b, on) -> {
+            settings.setSound(on);
+            if (on) click.play();
+        });
+        box.addView(vib);
+        box.addView(snd);
+        TextView hint = new TextView(this);
+        hint.setText("「=」長押しでこの設定を開きます");
+        hint.setTextSize(12);
+        hint.setTextColor(0xFF8C9097);
+        hint.setPadding(0, Ui.dp(this, 12), 0, 0);
+        box.addView(hint);
+        new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle("設定")
+                .setView(box)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
+    private Switch settingSwitch(String label, boolean on) {
+        Switch s = new Switch(this);
+        s.setText(label);
+        s.setTextSize(16);
+        s.setChecked(on);
+        s.setMinHeight(Ui.dp(this, 52));
+        return s;
     }
 
     private KeyView makeKey(String label, Calculator.Key k) {
@@ -116,7 +201,9 @@ public final class MainActivity extends Activity {
     }
 
     private void refresh() {
-        lcd.show(Lcd.State.of(calc));
+        Lcd.State st = Lcd.State.of(calc);
+        lcd.show(st);
+        memLcd.show(st);
     }
 
     private SharedPreferences prefs() { return getSharedPreferences("calc", MODE_PRIVATE); }
@@ -129,5 +216,10 @@ public final class MainActivity extends Activity {
     @Override protected void onPause() {
         super.onPause();
         prefs().edit().putString("calc", calc.save()).apply();
+    }
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        click.release();
     }
 }

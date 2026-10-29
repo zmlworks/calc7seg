@@ -260,17 +260,73 @@ public class CalculatorTest {
     }
 
     @Test public void lcdState() {
+        Lcd.State e = Lcd.State.of(c);
+        assertEquals("0.", e.mem);                               // memory panel shows a lit "0." when empty
+        assertEquals(0, e.op);
         c.keys("12[M_PLUS]3+4");
         Lcd.State s = Lcd.State.of(c);
         assertEquals("4.", s.main);
         assertEquals("12.", s.mem);
-        assertTrue(s.memory);
         assertEquals('+', s.op);
         assertFalse(s.error);
+        c.keys("=[MC]");
+        assertEquals("0.", Lcd.State.of(c).mem);
+        c.keys("5[M_MINUS]");
+        assertEquals("-5.", Lcd.State.of(c).mem);
+        assertArrayEquals(new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0, Lcd.DIGIT[0]}, Lcd.layout(new Calculator().memoryDisplay()).seg);
+    }
+
+    @Test public void operatorAnnunciatorMapping() {
+        assertEquals(-1, Lcd.opIndex((char) 0));
+        assertEquals(0, Lcd.opIndex('+'));
+        assertEquals(1, Lcd.opIndex('-'));
+        assertEquals(2, Lcd.opIndex('×'));
+        assertEquals(3, Lcd.opIndex('÷'));
+        // every operator the engine can report maps to its own fixed annunciator
+        String[] keys = {"1+", "1-", "1*", "1/"};
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (String k : keys) {
+            Calculator x = new Calculator();
+            x.keys(k);
+            int i = Lcd.opIndex(Lcd.State.of(x).op);
+            assertTrue(i >= 0);
+            seen.add(i);
+        }
+        assertEquals(4, seen.size());
         assertEquals(2, Lcd.opSymbol('+', 0, 0, 10).size());
         assertEquals(1, Lcd.opSymbol('-', 0, 0, 10).size());
         assertEquals(2, Lcd.opSymbol('×', 0, 0, 10).size());
         assertEquals(3, Lcd.opSymbol('÷', 0, 0, 10).size());
+    }
+
+    @Test public void annunciatorsDoNotOverlapDigitsOrE() {
+        for (float w : new float[]{400, 1000, 1440}) {
+            Lcd.Metrics m = new Lcd.Metrics(w);
+            float annBottom = m.annTop + m.annS;
+            assertTrue(annBottom < m.d.top);                       // above the digits
+            float lastRight = m.annLeft + 3 * m.annPitch + m.annS;
+            assertTrue(lastRight < m.eX - m.eSize * 0.4f);         // left of E
+            assertTrue(m.eX + m.eSize < w);
+        }
+    }
+
+    @Test public void settingsDefaultsAndPersistence() {
+        java.util.Map<String, Boolean> map = new java.util.HashMap<>();
+        Settings.Store store = new Settings.Store() {
+            @Override public boolean get(String k, boolean d) { Boolean v = map.get(k); return v == null ? d : v; }
+            @Override public void put(String k, boolean v) { map.put(k, v); }
+        };
+        Settings st = new Settings(store);
+        assertTrue(st.vibration());
+        assertTrue(st.sound());
+        st.setVibration(false);
+        st.setSound(false);
+        Settings again = new Settings(store);                       // new instance, same storage
+        assertFalse(again.vibration());
+        assertFalse(again.sound());
+        again.setSound(true);
+        assertTrue(new Settings(store).sound());
+        assertFalse(new Settings(store).vibration());
     }
 
     @Test public void saveRestore() {

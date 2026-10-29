@@ -74,7 +74,7 @@ final class Lcd {
     // ------------------------------------------------------------------ rendering (shared)
 
     static final int BG_TOP = 0xFFB4BCA0, BG_BOTTOM = 0xFF9AA386;
-    static final int ON = 0xF0161A12, GHOST = 0x14101808, INV_FG = 0xFFF2F5EA;
+    static final int ON = 0xF0161A12, GHOST = 0x14101808;
 
     /** Minimal drawing surface implemented by the Android view and the JVM preview. */
     interface Painter {
@@ -85,105 +85,120 @@ final class Lcd {
         void text(String s, float cx, float baseline, float size, int color);
     }
 
-    /** What the LCD shows. */
+    /** What the main LCD shows (the memory value lives on its own panel, see {@link #renderMemory}). */
     static final class State {
         String main = "0.", mem = "0.";
-        boolean memory, error;
+        boolean error;
         char op;
 
         static State of(Calculator c) {
             State s = new State();
             s.main = c.display();
             s.mem = c.memoryDisplay();
-            s.memory = c.hasMemory();
             s.error = c.isError();
             s.op = c.pendingOp();
             return s;
         }
     }
 
+    /** Fixed annunciator positions, left to right, like printed segments on a real LCD. */
+    static final String OPS = "+-×÷";
+
+    /** Index of the annunciator to light for a pending operator, or -1. */
+    static int opIndex(char op) { return op == 0 ? -1 : OPS.indexOf(op); }
+
+    /** Digit block geometry. */
+    static final class Digits {
+        final float cellW, cellH, pitch, th, gap, signW, dpR, left, top, slant = 0.07f;
+
+        Digits(float right, float top, float cellW, float aspect, float thick) {
+            this.cellW = cellW;
+            this.top = top;
+            pitch = cellW * 1.32f;
+            cellH = cellW * aspect;
+            th = cellW * thick;
+            gap = th * 0.11f;
+            signW = cellW * 0.9f;
+            dpR = th * 0.55f;
+            left = right - (signW + CELLS * pitch) + (pitch - cellW) * 0.1f;
+        }
+
+        static float unitsWide() { return 0.9f + CELLS * 1.32f; }
+    }
+
     /**
-     * Layout, all in pixels, derived from the width only:
-     * top row  = [inverted operator box] M E ........ [small 10-digit memory display]
+     * Main LCD, derived from the width only:
+     * top row  = [+][−][×][÷] fixed operator annunciators ........ E
      * main row = [-] 10 large digits.
      */
     static final class Metrics {
-        final float width, height, pad, slant = 0.07f;
-        // main digits
-        final float cellW, cellH, pitch, th, gap, signW, dpR, left, top;
-        // memory digits
-        final float sW, sH, sPitch, sTh, sGap, sSignW, sDpR, sLeft, sTop;
-        // annunciators
-        final float boxL, boxT, boxS, indSize, mX, eX, indBase;
+        final float width, height, pad;
+        final Digits d;
+        final float annTop, annS, annPitch, annLeft, eX, eSize, eBase;
 
         Metrics(float width) {
             this.width = width;
             pad = width * 0.035f;
             float iw = width - 2 * pad;
-            cellW = iw / (0.9f + CELLS * 1.32f);
-            pitch = cellW * 1.32f;
-            cellH = cellW * 2.15f;         // tall, narrow digits
-            th = cellW * 0.27f;            // bold segments
-            gap = th * 0.11f;
-            signW = cellW * 0.9f;
-            dpR = th * 0.55f;
-            left = width - pad - (signW + CELLS * pitch) + (pitch - cellW) * 0.1f;
+            float cellW = iw / Digits.unitsWide();
+            annS = cellW * 0.62f;                       // annunciator square
+            annTop = pad * 0.85f;
+            annPitch = annS * 1.55f;
+            annLeft = pad * 1.3f;
+            float top = annTop + annS + annS * 0.45f;
+            d = new Digits(width - pad, top, cellW, 2.15f, 0.27f);
+            height = top + d.cellH + pad;
+            eSize = annS * 1.05f;
+            eX = annLeft + 4 * annPitch + eSize * 0.9f;
+            eBase = annTop + annS / 2 + eSize * 0.36f;
+        }
+    }
 
-            sH = cellH * 0.36f;
-            sW = sH / 1.9f;
-            sPitch = sW * 1.32f;
-            sTh = sW * 0.26f;
-            sGap = sTh * 0.12f;
-            sSignW = sW * 0.9f;
-            sDpR = sTh * 0.6f;
-            sLeft = width - pad - (sSignW + CELLS * sPitch) + (sPitch - sW) * 0.1f;
-            sTop = pad * 0.9f;
+    /** Small memory panel: 10 digits only. */
+    static final class MemMetrics {
+        final float width, height, pad;
+        final Digits d;
 
-            top = sTop + sH + sH * 0.45f;
-            height = top + cellH + pad;
-
-            boxS = sH * 1.08f;
-            boxL = pad * 1.2f;
-            boxT = sTop + (sH - boxS) / 2;
-            indSize = sH * 0.7f;
-            mX = boxL + boxS + indSize * 0.95f;
-            eX = mX + indSize * 1.25f;
-            indBase = sTop + sH / 2 + indSize * 0.36f;
+        MemMetrics(float width) {
+            this.width = width;
+            pad = width * 0.045f;
+            float cellW = (width - 2 * pad) / Digits.unitsWide();
+            d = new Digits(width - pad, pad, cellW, 1.95f, 0.25f);
+            height = pad + d.cellH + pad;
         }
     }
 
     static void render(Painter p, Metrics m, State s) {
-        // inverted operator annunciator: black block, white symbol; faint ghost block when off
-        p.roundRect(m.boxL, m.boxT, m.boxL + m.boxS, m.boxT + m.boxS, m.boxS * 0.14f, s.op != 0 ? ON : GHOST);
-        if (s.op != 0) {
-            for (float[] poly : opSymbol(s.op, m.boxL + m.boxS / 2, m.boxT + m.boxS / 2, m.boxS)) p.poly(poly, INV_FG);
+        int lit = opIndex(s.op);
+        for (int i = 0; i < OPS.length(); i++) {
+            float cx = m.annLeft + i * m.annPitch + m.annS / 2, cy = m.annTop + m.annS / 2;
+            for (float[] poly : opSymbol(OPS.charAt(i), cx, cy, m.annS)) p.poly(poly, i == lit ? ON : GHOST);
         }
-        p.text("M", m.mX, m.indBase, m.indSize, s.memory ? ON : GHOST);
-        p.text("E", m.eX, m.indBase, m.indSize, s.error ? ON : GHOST);
-        // memory display: ghost-only (blank) while memory is empty, like an unlit LCD
-        digits(p, layout(s.memory ? s.mem : ""), m.sLeft, m.sTop, m.sW, m.sH, m.sPitch, m.sTh, m.sGap,
-                m.sSignW, m.sDpR, m.slant);
-        digits(p, layout(s.main), m.left, m.top, m.cellW, m.cellH, m.pitch, m.th, m.gap, m.signW, m.dpR, m.slant);
+        p.text("E", m.eX, m.eBase, m.eSize, s.error ? ON : GHOST);
+        digits(p, layout(s.main), m.d);
     }
 
-    private static void digits(Painter p, Frame f, float left, float top, float w, float h, float pitch,
-                               float th, float gap, float signW, float dpR, float slant) {
-        p.poly(segment(6, left - w * 0.1f, top, signW, h, th, gap, slant), f.neg ? ON : GHOST);
+    static void renderMemory(Painter p, MemMetrics m, String mem) {
+        digits(p, layout(mem), m.d);
+    }
+
+    private static void digits(Painter p, Frame f, Digits d) {
+        p.poly(segment(6, d.left - d.cellW * 0.1f, d.top, d.signW, d.cellH, d.th, d.gap, d.slant), f.neg ? ON : GHOST);
         for (int i = 0; i < CELLS; i++) {
-            float l = left + signW + i * pitch;
+            float l = d.left + d.signW + i * d.pitch;
             for (int sg = 0; sg < 7; sg++) {
-                float[] pt = segment(sg, l, top, w, h, th, gap, slant);
+                float[] pt = segment(sg, l, d.top, d.cellW, d.cellH, d.th, d.gap, d.slant);
                 p.poly(pt, GHOST);
                 if ((f.seg[i] & (1 << sg)) != 0) p.poly(pt, ON);
             }
-            p.circle(l + w + (pitch - w) * 0.45f, top + h - dpR, dpR, f.dp[i] ? ON : GHOST);
+            p.circle(l + d.cellW + (d.pitch - d.cellW) * 0.45f, d.top + d.cellH - d.dpR, d.dpR, f.dp[i] ? ON : GHOST);
         }
     }
 
     /** + - × ÷ as polygons centred in a box of side s. */
     static java.util.List<float[]> opSymbol(char op, float cx, float cy, float s) {
         java.util.List<float[]> out = new java.util.ArrayList<>();
-        float len = s * 0.62f, t = s * 0.15f;
+        float len = s * 0.9f, t = s * 0.2f;
         switch (op) {
             case '+':
                 out.add(rect(cx, cy, len, t, 0));
@@ -195,8 +210,8 @@ final class Lcd {
                 break;
             case '÷':
                 out.add(rect(cx, cy, len, t, 0));
-                out.add(dot(cx, cy - s * 0.24f, t * 0.62f));
-                out.add(dot(cx, cy + s * 0.24f, t * 0.62f));
+                out.add(dot(cx, cy - s * 0.34f, s * 0.11f));
+                out.add(dot(cx, cy + s * 0.34f, s * 0.11f));
                 break;
             default: // '-'
                 out.add(rect(cx, cy, len, t, 0));

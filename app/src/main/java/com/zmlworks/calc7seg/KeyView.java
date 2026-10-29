@@ -1,43 +1,59 @@
 package com.zmlworks.calc7seg;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
-import android.view.HapticFeedbackConstants;
+import android.view.MotionEvent;
 import android.view.View;
 
-/** A physical-looking calculator key: rounded face over a darker skirt; sinks when pressed. */
+/**
+ * A physical-looking calculator key, drawn with gradients only (no bitmaps):
+ * soft shadow → darker side wall (skirt) → convex bevel lit from above → slightly concave dish → printed label.
+ * Pressed: the cap sinks onto the skirt, darkens and its shadow shrinks.
+ */
 final class KeyView extends View {
+    interface Feedback { void onPress(View v); }
+
     final Calculator.Key key;
     private final String label;
-    private final int face, skirt, text;
+    private final int face, text;
     private final float labelScale;
+    private Feedback feedback;
+
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG), tp = new Paint(Paint.ANTI_ALIAS_FLAG),
-            hl = new Paint(Paint.ANTI_ALIAS_FLAG);
+            line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF r = new RectF();
+    private Shader skirt, bevelUp, dishUp, bevelDown, dishDown;
+    private float inset, depth, rad, bevel, sink;
 
     KeyView(Context c, Calculator.Key key, String label, String description, int face, int text, float labelScale) {
         super(c);
         this.key = key;
         this.label = label;
         this.face = face;
-        this.skirt = darken(face, 0.55f);
         this.text = text;
         this.labelScale = labelScale;
         tp.setTextAlign(Paint.Align.CENTER);
-        tp.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
-        hl.setColor(0x14FFFFFF);
+        tp.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        tp.setSubpixelText(true);
+        line.setStyle(Paint.Style.STROKE);
         setClickable(true);
         setFocusable(true);
         setContentDescription(description);
-        setHapticFeedbackEnabled(true);
     }
 
-    @Override public boolean performClick() {
-        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-        return super.performClick();
+    void setFeedback(Feedback f) { feedback = f; }
+
+    /** Click sound / vibration on touch-down, like a real key, not on release. */
+    @SuppressLint("ClickableViewAccessibility")
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN && isEnabled() && feedback != null) feedback.onPress(this);
+        return super.onTouchEvent(e);
     }
 
     @Override protected void drawableStateChanged() {
@@ -45,35 +61,76 @@ final class KeyView extends View {
         invalidate();
     }
 
+    @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
+        float m = Math.min(w, h);
+        inset = m * 0.06f;
+        depth = m * 0.085f;
+        rad = m * 0.17f;
+        bevel = m * 0.05f;
+        sink = depth * 0.7f;
+        float top = inset, bottom = h - inset - depth;
+        skirt = new LinearGradient(0, top, 0, h - inset, darken(face, 0.62f), darken(face, 0.38f), Shader.TileMode.CLAMP);
+        bevelUp = new LinearGradient(0, top, 0, bottom, mix(face, 0xFFFFFFFF, 0.22f), darken(face, 0.72f), Shader.TileMode.CLAMP);
+        dishUp = new LinearGradient(0, top + bevel, 0, bottom - bevel, darken(face, 0.93f), mix(face, 0xFFFFFFFF, 0.06f), Shader.TileMode.CLAMP);
+        int fd = darken(face, 0.86f);
+        bevelDown = new LinearGradient(0, top + sink, 0, bottom + sink, mix(fd, 0xFFFFFFFF, 0.14f), darken(fd, 0.75f), Shader.TileMode.CLAMP);
+        dishDown = new LinearGradient(0, top + sink + bevel, 0, bottom + sink - bevel, darken(fd, 0.92f), mix(fd, 0xFFFFFFFF, 0.04f), Shader.TileMode.CLAMP);
+        line.setStrokeWidth(Math.max(1f, m * 0.012f));
+    }
+
     @Override protected void onDraw(Canvas c) {
         float w = getWidth(), h = getHeight();
-        float inset = Math.min(w, h) * 0.07f, depth = Math.min(w, h) * 0.07f, rad = Math.min(w, h) * 0.16f;
         boolean down = isPressed();
-        float sink = down ? depth * 0.75f : 0;
-        // skirt / shadow
-        p.setColor(0x55000000);
-        r.set(inset, inset + depth * 0.6f, w - inset, h - inset + depth * 0.4f);
+        float off = down ? sink : 0;
+        float l = inset, rr = w - inset, top = inset, bottom = h - inset - depth;
+
+        // soft shadow under the key (smaller when pressed)
+        p.setShader(null);
+        int layers = down ? 1 : 3;
+        for (int i = layers; i >= 1; i--) {
+            float s = i * inset * 0.28f;
+            p.setColor((0x16 + (layers - i) * 0x0C) << 24);
+            r.set(l - s * 0.5f, top + depth * 0.6f + s * 0.4f, rr + s * 0.5f, h - inset + s);
+            c.drawRoundRect(r, rad + s, rad + s, p);
+        }
+        // skirt / side wall
+        p.setShader(skirt);
+        r.set(l, top + depth * 0.5f, rr, h - inset);
         c.drawRoundRect(r, rad, rad, p);
-        p.setColor(skirt);
-        r.set(inset, inset + depth, w - inset, h - inset);
+        // cap: bevel (lit from above)
+        p.setShader(down ? bevelDown : bevelUp);
+        r.set(l, top + off, rr, bottom + off);
         c.drawRoundRect(r, rad, rad, p);
-        // face
-        p.setColor(down ? darken(face, 0.88f) : face);
-        r.set(inset, inset + sink, w - inset, h - inset - depth + sink);
-        c.drawRoundRect(r, rad, rad, p);
-        // top highlight
-        r.set(inset + rad * 0.5f, inset + sink + depth * 0.3f, w - inset - rad * 0.5f, inset + sink + depth * 0.3f + h * 0.12f);
-        c.drawRoundRect(r, rad * 0.5f, rad * 0.5f, hl);
-        // label
-        float faceH = h - 2 * inset - depth;
-        tp.setColor(text);
-        tp.setTextSize(Math.min(faceH * 0.46f, (w - 2 * inset) * 0.40f) * labelScale);
-        float cy = inset + sink + faceH / 2 - (tp.descent() + tp.ascent()) / 2;
+        // cap: slightly concave dish (reverse gradient reads as a dip)
+        p.setShader(down ? dishDown : dishUp);
+        r.set(l + bevel, top + off + bevel * 0.8f, rr - bevel, bottom + off - bevel * 1.2f);
+        c.drawRoundRect(r, rad * 0.8f, rad * 0.8f, p);
+        p.setShader(null);
+        // specular edge along the top
+        line.setColor(down ? 0x22FFFFFF : 0x44FFFFFF);
+        c.drawLine(l + rad, top + off + line.getStrokeWidth(), rr - rad, top + off + line.getStrokeWidth(), line);
+
+        // printed label: faint dark offset under it gives a slight ink-on-plastic feel
+        float faceH = bottom - top;
+        tp.setTextSize(Math.min(faceH * 0.46f, (rr - l) * 0.40f) * labelScale);
+        float cy = top + off + faceH / 2 - (tp.descent() + tp.ascent()) / 2;
+        float px = Math.max(1f, tp.getTextSize() * 0.03f);
+        tp.setColor(0x66000000);
+        c.drawText(label, w / 2, cy + px, tp);
+        tp.setColor(down ? darken(text, 0.88f) : text);
         c.drawText(label, w / 2, cy, tp);
     }
 
     static int darken(int c, float f) {
         int a = c >>> 24, rr = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
         return (a << 24) | (Math.round(rr * f) << 16) | (Math.round(g * f) << 8) | Math.round(b * f);
+    }
+
+    static int mix(int c, int d, float t) {
+        int a = c >>> 24;
+        int rr = Math.round(((c >> 16) & 0xFF) * (1 - t) + ((d >> 16) & 0xFF) * t);
+        int g = Math.round(((c >> 8) & 0xFF) * (1 - t) + ((d >> 8) & 0xFF) * t);
+        int b = Math.round((c & 0xFF) * (1 - t) + (d & 0xFF) * t);
+        return (a << 24) | (rr << 16) | (g << 8) | b;
     }
 }

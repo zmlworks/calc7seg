@@ -10,18 +10,21 @@ import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.view.View;
 
-/** Hand-drawn 7-segment LCD: 10-digit main display, small memory display, M/E and inverted operator. */
+/** Hand-drawn 7-segment LCD: either the main display (digits, + − × ÷ annunciators, E) or the memory panel. */
 public final class LcdView extends View implements Lcd.Painter {
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), bg = new Paint(Paint.ANTI_ALIAS_FLAG),
             txt = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
+    private final boolean memoryPanel;
     private Lcd.Metrics m;
+    private Lcd.MemMetrics mm;
     private Lcd.State state = new Lcd.State();
     private Canvas canvas;
 
-    public LcdView(Context c) {
+    public LcdView(Context c, boolean memoryPanel) {
         super(c);
+        this.memoryPanel = memoryPanel;
         txt.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
         txt.setTextAlign(Paint.Align.CENTER);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
@@ -30,31 +33,33 @@ public final class LcdView extends View implements Lcd.Painter {
 
     public void show(Lcd.State s) {
         state = s;
-        setContentDescription((s.error ? "E " : "") + (s.op != 0 ? s.op + " " : "") + s.main
-                + (s.memory ? ", M " + s.mem : ""));
+        setContentDescription(memoryPanel ? "memory " + s.mem
+                : (s.error ? "E " : "") + (s.op != 0 ? s.op + " " : "") + s.main);
         invalidate();
     }
 
     @Override protected void onMeasure(int ws, int hs) {
         int w = MeasureSpec.getSize(ws);
-        int h = Math.round(new Lcd.Metrics(w).height);
+        int h = Math.round(memoryPanel ? new Lcd.MemMetrics(w).height : new Lcd.Metrics(w).height);
         if (MeasureSpec.getMode(hs) == MeasureSpec.AT_MOST) h = Math.min(h, MeasureSpec.getSize(hs));
         else if (MeasureSpec.getMode(hs) == MeasureSpec.EXACTLY) h = MeasureSpec.getSize(hs);
         setMeasuredDimension(w, h);
     }
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
-        m = new Lcd.Metrics(w);
+        if (memoryPanel) mm = new Lcd.MemMetrics(w);
+        else m = new Lcd.Metrics(w);
         bg.setShader(new LinearGradient(0, 0, 0, h, Lcd.BG_TOP, Lcd.BG_BOTTOM, Shader.TileMode.CLAMP));
     }
 
     @Override protected void onDraw(Canvas c) {
-        if (m == null) return;
+        if (m == null && mm == null) return;
         float r = getHeight() * 0.05f;
         rect.set(0, 0, getWidth(), getHeight());
         c.drawRoundRect(rect, r, r, bg);
         canvas = c;
-        Lcd.render(this, m, state);
+        if (memoryPanel) Lcd.renderMemory(this, mm, state.mem);
+        else Lcd.render(this, m, state);
         canvas = null;
     }
 
