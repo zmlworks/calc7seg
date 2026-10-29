@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- LCD window -->
+    <path android:fillColor="#A7B093" android:pathData="M30,32h48a3,3 0 0,1 3,3v14a3,3 0 0,1 -3,3H30a3,3 0 0,1 -3,-3V35a3,3 0 0,1 3,-3z"/>
+    <!-- "8." segments -->
+    <path android:fillColor="#1A1E15" android:pathData="M62,35h9l-1,2h-7z M71,36l1,1v5l-2,0v-4z M71,43h1v6l-1,1h-1v-5z M62,49h7l1,1h-9z M61,43l2,1v5l-2,0z M61,37l2,1v4l-2,1z M63,42h6l1,1 -1,1h-6l-1,-1z M74,48h2v2h-2z"/>
+    <!-- keys -->
+    <path android:fillColor="#6A7079" android:pathData="M27,58h10v8h-10z M41,58h10v8h-10z M55,58h10v8h-10z"/>
+    <path android:fillColor="#D2572B" android:pathData="M69,58h12v8h-12z"/>
+    <path android:fillColor="#C8CBD0" android:pathData="M27,70h10v8h-10z M41,70h10v8h-10z M55,70h10v8h-10z M69,70h12v8h-12z"/>
+</vector>

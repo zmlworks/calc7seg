@@ -1,0 +1,1 @@
+-keep class com.zmlworks.calc7seg.MainActivity
