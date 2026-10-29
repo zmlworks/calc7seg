@@ -16,6 +16,8 @@ public class CalculatorTest {
 
     private String run(String keys) { c.keys(keys); return c.display(); }
 
+    private static String keysThen(Calculator x, String keys) { x.keys(keys); return x.display(); }
+
     @Test public void initialZero() { assertEquals("0.", c.display()); }
 
     @Test public void chainingImmediateExecution() {
@@ -186,11 +188,89 @@ public class CalculatorTest {
         assertEquals("0.3", run("[CA].1+.2="));
     }
 
-    @Test public void funcKeysAreNoOps() {
-        c.keys("12+");
-        c.press(Key.FUNC1);
-        c.press(Key.FUNC2);
-        assertEquals("15.", run("3="));
+    @Test public void reciprocal() {
+        assertEquals("0.25", run("4[RECIP]"));
+        assertEquals("4.", run("[RECIP]"));
+        assertEquals("0.333333333", run("[CA]3[RECIP]"));        // truncated to 10 digits
+        assertEquals("-0.5", run("[CA]2[NEG][RECIP]"));
+        assertEquals("0.2", run("[CA]2+3=[RECIP]"));             // on a result
+        assertEquals("10.5", run("[CA]10+2[RECIP]="));            // as the second operand
+        assertEquals("5.2", run("[CA]5+[RECIP]="));               // 5 + 1/5 (like 9 + √)
+        assertEquals("3.", run("[CA]1[RECIP]+2="));
+        c.keys("[CA]0[RECIP]");
+        assertTrue(c.isError());
+        assertEquals("0.", c.display());
+        c.keys("[CE]");
+        assertFalse(c.isError());
+        c.keys(".00000001[RECIP]");                             // 1e8 fits
+        assertEquals("100000000.", c.display());
+        c.keys("[CA].000000001[RECIP]");                        // 1e9 fits
+        assertFalse(c.isError());
+    }
+
+    @Test public void ans() {
+        assertEquals("0.", run("[ANS]"));                       // starts at 0
+        c.keys("[CA]2+3=");
+        assertEquals("5", c.ans().toPlainString());
+        assertEquals("15.", run("10+[ANS]="));                  // Ans as operand
+        assertEquals("15", c.ans().toPlainString());
+        assertEquals("18.", run("[ANS]+3="));                   // starts a new chain like MR
+        assertEquals("21.", run("="));                          // constant = updates Ans too
+        assertEquals("21", c.ans().toPlainString());
+        c.keys("[CA]7*6+");                                     // intermediate 42 is not an "=" result
+        assertEquals("21", c.ans().toPlainString());
+        c.keys("[CA]");
+        assertEquals("21.", run("[ANS]"));                      // CA keeps Ans
+        assertEquals("7.", run("7"));                           // digits after Ans start a fresh entry
+    }
+
+    @Test public void ansViaMemoryCompletion() {
+        c.keys("4*5[M_PLUS]");                                  // M+ completes 4×5=
+        assertEquals("20", c.ans().toPlainString());
+        assertEquals("20.", run("[CA][MR]"));
+    }
+
+    @Test public void pendingOperator() {
+        assertEquals(0, c.pendingOp());
+        c.keys("2+");
+        assertEquals('+', c.pendingOp());
+        c.keys("3");
+        assertEquals('+', c.pendingOp());                       // still shown while keying the 2nd number
+        c.keys("*");
+        assertEquals('×', c.pendingOp());
+        c.keys("-");
+        assertEquals('-', c.pendingOp());                       // operator replaced
+        c.keys("/4");
+        assertEquals('÷', c.pendingOp());
+        c.keys("=");
+        assertEquals(0, c.pendingOp());                         // cleared by =
+        c.keys("=");
+        assertEquals(0, c.pendingOp());                         // constant = does not show it
+        c.keys("5+");
+        c.keys("[CA]");
+        assertEquals(0, c.pendingOp());                         // cleared by CA
+        c.keys("5/0=");
+        assertEquals(0, c.pendingOp());                         // cleared by E
+        c.keys("[CA]5+2[M_PLUS]");
+        assertEquals(0, c.pendingOp());                         // M+ completes the operation
+        c.keys("[CA]9+[SQRT]");
+        assertEquals('+', c.pendingOp());                       // √ keeps the pending operation
+        c.keys("[CE]");
+        assertEquals('+', c.pendingOp());                       // CE keeps it too
+    }
+
+    @Test public void lcdState() {
+        c.keys("12[M_PLUS]3+4");
+        Lcd.State s = Lcd.State.of(c);
+        assertEquals("4.", s.main);
+        assertEquals("12.", s.mem);
+        assertTrue(s.memory);
+        assertEquals('+', s.op);
+        assertFalse(s.error);
+        assertEquals(2, Lcd.opSymbol('+', 0, 0, 10).size());
+        assertEquals(1, Lcd.opSymbol('-', 0, 0, 10).size());
+        assertEquals(2, Lcd.opSymbol('×', 0, 0, 10).size());
+        assertEquals(3, Lcd.opSymbol('÷', 0, 0, 10).size());
     }
 
     @Test public void saveRestore() {
@@ -202,6 +282,19 @@ public class CalculatorTest {
         d.keys("=");
         assertEquals("20.", d.display());
         assertFalse(new Calculator().restore("garbage"));
+        // Ans persists
+        Calculator e = new Calculator();
+        e.keys("6*7=[CA]");
+        Calculator f = new Calculator();
+        assertTrue(f.restore(e.save()));
+        assertEquals("42.", keysThen(f, "[ANS]"));
+        // v0.1.0 state (12 fields, no Ans) still restores
+        String old = String.join("\u001f", "0", "5", "0", "3", "0", "0", "0", "0", "0", "0.", "e", "0");
+        Calculator o = new Calculator();
+        assertTrue(o.restore(old));
+        assertEquals("5.", o.display());
+        assertTrue(o.hasMemory());
+        assertEquals("0", o.ans().toPlainString());
     }
 
     @Test public void lcdLayout() {

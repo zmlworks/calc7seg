@@ -15,6 +15,10 @@ import java.math.RoundingMode;
  *   <li>|result| ≥ 10^10 → E (overflow), display shows the value × 10^-10 like real calculators.
  *       Division by zero, √ of a negative → E with 0. Only CA / CE leave the error state.</li>
  *   <li>M+ / M- complete a pending operation first, then add / subtract the displayed value.</li>
+ *   <li>1/x replaces the displayed value (entry or result) with its reciprocal; 1/0 → E.</li>
+ *   <li>Ans. recalls the result of the most recent "=" (including repeated constant "=" and the "="
+ *       implied by M+/M- on a pending operation) as a new operand, like MR. Intermediate chain results
+ *       are not stored. CA does not clear Ans (like memory); it starts at 0.</li>
  * </ul>
  * Pure Java, no Android dependencies, so it is unit-tested on the JVM.
  */
@@ -25,8 +29,10 @@ public final class Calculator {
         D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D00, DOT,
         ADD, SUB, MUL, DIV, EQ, SQRT, NEG, BS, CA, CE,
         MC, MR, M_MINUS, M_PLUS,
-        /** Unassigned "func" keys: no-op for now. */
-        FUNC1, FUNC2
+        /** Reciprocal 1/x. */
+        RECIP,
+        /** Recall the last "=" result. */
+        ANS
     }
 
     private static final BigDecimal LIMIT = BigDecimal.TEN.pow(DIGITS);
@@ -41,6 +47,7 @@ public final class Calculator {
     private BigDecimal x = BigDecimal.ZERO;        // value shown when not typing
     private BigDecimal constVal = BigDecimal.ZERO; // operand repeated by "="
     private BigDecimal memory = BigDecimal.ZERO;
+    private BigDecimal ans = BigDecimal.ZERO;      // last "=" result
     private char op;                               // pending operator (+ - × ÷) or 0
     private char constOp;                          // operator repeated by "=" or 0
     private boolean typing;                        // a number is being keyed in
@@ -75,7 +82,8 @@ public final class Calculator {
                 case MR: x = memory; typing = false; xNew = true; break;
                 case M_PLUS: memoryAdd(false); break;
                 case M_MINUS: memoryAdd(true); break;
-                case FUNC1: case FUNC2: break; // placeholders, intentionally no-op
+                case RECIP: reciprocal(); break;
+                case ANS: x = ans; typing = false; xNew = true; break;
                 default: digits(String.valueOf((char) ('0' + (k.ordinal() - Key.D0.ordinal())))); break;
             }
         } catch (CalcError e) {
@@ -184,8 +192,10 @@ public final class Calculator {
             constVal = b;
             op = 0;
             acc = x = r;
+            ans = r;
         } else if (constOp != 0) {
             acc = x = calc(x, constOp, constVal);
+            ans = x;
         }
         typing = false;
         xNew = false;
@@ -194,6 +204,13 @@ public final class Calculator {
     private void sqrt() {
         if (x.signum() < 0) throw new CalcError("0.");
         x = fit(sqrt(x));
+        typing = false;
+        xNew = true;
+    }
+
+    private void reciprocal() {
+        if (x.signum() == 0) throw new CalcError("0.");
+        x = calc(BigDecimal.ONE, '÷', x);
         typing = false;
         xNew = true;
     }
@@ -294,7 +311,10 @@ public final class Calculator {
     public boolean isError() { return error; }
     public boolean hasMemory() { return memory.signum() != 0; }
     public BigDecimal memory() { return memory; }
-    /** Pending operator for an annunciator, or 0. */
+    public BigDecimal ans() { return ans; }
+    /** Memory value as LCD text ("0." when empty). */
+    public String memoryDisplay() { return format(memory); }
+    /** Pending operator ('+', '-', '×', '÷') for the LCD annunciator, or 0 (none / after =, CA, E). */
     public char pendingOp() { return op; }
 
     // ---------------------------------------------------------------- state (rotation / restart)
@@ -302,13 +322,14 @@ public final class Calculator {
     public String save() {
         return String.join("\u001f", acc.toPlainString(), x.toPlainString(), constVal.toPlainString(),
                 memory.toPlainString(), String.valueOf((int) op), String.valueOf((int) constOp),
-                bit(typing), bit(xNew), bit(error), errorText, "e" + entry, bit(entryNeg));
+                bit(typing), bit(xNew), bit(error), errorText, "e" + entry, bit(entryNeg),
+                ans.toPlainString());
     }
 
     public boolean restore(String s) {
         if (s == null) return false;
         String[] p = s.split("\u001f", -1);
-        if (p.length != 12) return false;
+        if (p.length != 12 && p.length != 13) return false; // 12 = v0.1.0 (no Ans)
         try {
             BigDecimal a = new BigDecimal(p[0]), xx = new BigDecimal(p[1]), c = new BigDecimal(p[2]),
                     m = new BigDecimal(p[3]);
@@ -320,10 +341,11 @@ public final class Calculator {
             entry.setLength(0);
             entry.append(p[10].substring(1));
             entryNeg = p[11].equals("1");
+            ans = p.length > 12 ? new BigDecimal(p[12]) : BigDecimal.ZERO;
             return true;
         } catch (RuntimeException e) {
             clearAll();
-            memory = BigDecimal.ZERO;
+            memory = ans = BigDecimal.ZERO;
             return false;
         }
     }

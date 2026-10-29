@@ -15,7 +15,6 @@ public final class MainActivity extends Activity {
     private static final int NUM = 0xFF3B3E44, NUM_T = 0xFFF2F2EE;
     private static final int OPR = 0xFF6A7079, OPR_T = 0xFFFFFFFF;
     private static final int MEM = 0xFF4A4E55, MEM_T = 0xFFE4E6E9;
-    private static final int FUN = 0xFF34363B, FUN_T = 0xFF8C9097;
     private static final int CLR = 0xFFD2572B, CLR_T = 0xFFFFFFFF;
     private static final int EQL = 0xFF8E959E, EQL_T = 0xFFFFFFFF;
 
@@ -25,7 +24,7 @@ public final class MainActivity extends Activity {
     /** Key grid, top to bottom, exactly 4 columns (owner's layout; digits 1-2-3 on top). */
     private static final Object[][] ROWS = {
             {"MC", Calculator.Key.MC}, {"MR", Calculator.Key.MR}, {"M-", Calculator.Key.M_MINUS}, {"M+", Calculator.Key.M_PLUS},
-            {"func", Calculator.Key.FUNC1}, {"func", Calculator.Key.FUNC2}, {"CA", Calculator.Key.CA}, {"CE", Calculator.Key.CE},
+            {"1/x", Calculator.Key.RECIP}, {"Ans.", Calculator.Key.ANS}, {"CA", Calculator.Key.CA}, {"CE", Calculator.Key.CE},
             {"BS", Calculator.Key.BS}, {"√", Calculator.Key.SQRT}, {"+/-", Calculator.Key.NEG}, {"÷", Calculator.Key.DIV},
             {"1", Calculator.Key.D1}, {"2", Calculator.Key.D2}, {"3", Calculator.Key.D3}, {"×", Calculator.Key.MUL},
             {"4", Calculator.Key.D4}, {"5", Calculator.Key.D5}, {"6", Calculator.Key.D6}, {"−", Calculator.Key.SUB},
@@ -96,7 +95,8 @@ public final class MainActivity extends Activity {
         String desc = label;
         switch (k) {
             case MC: case MR: case M_MINUS: case M_PLUS: face = MEM; text = MEM_T; scale = 0.72f; break;
-            case FUNC1: case FUNC2: face = FUN; text = FUN_T; scale = 0.62f; desc = "func (unassigned)"; break;
+            case RECIP: face = OPR; text = OPR_T; scale = 0.72f; desc = "reciprocal"; break;
+            case ANS: face = MEM; text = MEM_T; scale = 0.68f; desc = "answer"; break;
             case CA: case CE: face = CLR; text = CLR_T; scale = 0.8f; break;
             case EQ: face = EQL; text = EQL_T; break;
             case BS: case SQRT: case NEG: face = OPR; text = OPR_T; scale = 0.8f; break;
@@ -110,20 +110,13 @@ public final class MainActivity extends Activity {
     }
 
     private void onKey(Calculator.Key k) {
-        if (k == Calculator.Key.FUNC1) { onFunc(1); return; }
-        if (k == Calculator.Key.FUNC2) { onFunc(2); return; }
         calc.press(k);
         refresh();
         prefs().edit().putString("calc", calc.save()).apply(); // survive kill/reinstall, not just pause
     }
 
-    /** Placeholder for the two unassigned "func" keys. Assign behaviour here later. */
-    private void onFunc(int n) {
-        calc.press(n == 1 ? Calculator.Key.FUNC1 : Calculator.Key.FUNC2); // no-op in the engine for now
-    }
-
     private void refresh() {
-        lcd.show(calc.display(), calc.hasMemory(), calc.isError());
+        lcd.show(Lcd.State.of(calc));
     }
 
     private SharedPreferences prefs() { return getSharedPreferences("calc", MODE_PRIVATE); }
