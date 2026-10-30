@@ -7,6 +7,8 @@ import android.media.SoundPool;
 /**
  * Low-latency key sound: one crisp "kasha" snap (res/raw/key_snap.wav, synthesized by
  * tools/sound/make_click.py), played identically on every press (no variants, no pitch variation).
+ * Uses media attributes so it follows the MEDIA volume; SoundPool never requests audio focus, so
+ * music playing in another app is not paused or ducked.
  */
 final class KeyClick {
     private static final float VOLUME = 0.45f;
@@ -16,7 +18,7 @@ final class KeyClick {
 
     KeyClick(Context c) {
         pool = new SoundPool.Builder().setMaxStreams(4).setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_MEDIA)              // STREAM_MUSIC: follows the media volume
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
         pool.setOnLoadCompleteListener((p, sid, status) -> loaded = status == 0);
         id = pool.load(c, R.raw.key_snap, 1);

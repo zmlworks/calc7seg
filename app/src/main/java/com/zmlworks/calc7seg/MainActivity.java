@@ -14,7 +14,10 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
-    static final int BODY = 0xFF2B2D31;
+    /** Light-grey office-calculator resin, slightly warm; vertical shading top → bottom. */
+    static final int BODY = 0xFFD6D4CE, BODY_TOP = 0xFFDEDCD6, BODY_BOTTOM = 0xFFC8C6BF;
+    /** Pad-printed body graphics: charcoal brand, accent model line, mid-grey captions. */
+    static final int PRINT = 0xFF3A3C40, PRINT_ACCENT = 0xFFA8401C, PRINT_SUB = 0xFF5E6166;
     private static final int NUM = 0xFF26282D, NUM_T = 0xFFF2F2EE;
     private static final int OPR = 0xFF4B5159, OPR_T = 0xFFFFFFFF;
     private static final int MEM = 0xFF383C42, MEM_T = 0xFFE4E6E9;
@@ -34,7 +37,8 @@ public final class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BODY);
+        root.setBackground(bodyBackground());
+        setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC); // volume keys = media volume
         int pad = Ui.dp(this, 12);
         root.setPadding(pad, pad, pad, pad);
 
@@ -47,11 +51,11 @@ public final class MainActivity extends Activity {
         top.setGravity(Gravity.BOTTOM);
         LinearLayout printed = new LinearLayout(this);
         printed.setOrientation(LinearLayout.VERTICAL);
-        printed.addView(printedText("ZML", 13, 0.25f, Gravity.START), new LinearLayout.LayoutParams(-1, -2));
-        printed.addView(printedText("10 DIGITS", 9, 0.2f, Gravity.START), new LinearLayout.LayoutParams(-1, -2));
+        printed.addView(printedText("ZML", 13, 0.25f, Gravity.START, PRINT), new LinearLayout.LayoutParams(-1, -2));
+        printed.addView(printedText("10 DIGITS", 9, 0.2f, Gravity.START, PRINT_ACCENT), new LinearLayout.LayoutParams(-1, -2));
         View spacer = new View(this);
         printed.addView(spacer, new LinearLayout.LayoutParams(-1, 0, 1));
-        printed.addView(printedText("MEMORY", 9, 0.22f, Gravity.END), new LinearLayout.LayoutParams(-1, -2));
+        printed.addView(printedText("MEMORY", 9, 0.22f, Gravity.END, PRINT_SUB), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, -1, 0.4f);
         plp.rightMargin = Ui.dp(this, 8);
         top.addView(printed, plp);
@@ -96,13 +100,24 @@ public final class MainActivity extends Activity {
 
         setContentView(root);
         Ui.edgeToEdge(this, root);
+        Ui.lightBars(this);
         refresh();
     }
 
-    private TextView printedText(String s, float sp, float spacing, int gravity) {
+    /** Body: light-grey resin with soft vertical shading and the same fine grain as the keys. */
+    private android.graphics.drawable.Drawable bodyBackground() {
+        GradientDrawable shade = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{BODY_TOP, BODY, BODY_BOTTOM});
+        android.graphics.drawable.BitmapDrawable grain =
+                new android.graphics.drawable.BitmapDrawable(getResources(), KeyView.grain());
+        grain.setTileModeXY(android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT);
+        return new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{shade, grain});
+    }
+
+    private TextView printedText(String s, float sp, float spacing, int gravity, int color) {
         TextView t = new TextView(this);
         t.setText(s);
-        t.setTextColor(0xFF9A9EA6);
+        t.setTextColor(color);
         t.setTextSize(sp);
         t.setLetterSpacing(spacing);
         t.setGravity(gravity);
@@ -115,7 +130,7 @@ public final class MainActivity extends Activity {
         GradientDrawable bz = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0xFF0F1013, 0xFF1C1D21});
         bz.setCornerRadius(Ui.dp(this, radiusDp));
-        bz.setStroke(Ui.dp(this, 1), 0xFF3A3C41);
+        bz.setStroke(Ui.dp(this, 1), 0xFF6F6D68);   // moulded edge where the dark bezel meets the grey body
         bezel.setBackground(bz);
         int bp = Ui.dp(this, padDp);
         bezel.setPadding(bp, bp, bp, bp);
@@ -130,19 +145,21 @@ public final class MainActivity extends Activity {
 
     private void showSettings() {
         int pad = Ui.dp(this, 20);
-        LinearLayout box = new LinearLayout(this);
+        // dialog stays dark: build its views with the dialog theme, not the light activity theme
+        android.content.Context dc = new android.view.ContextThemeWrapper(this, android.R.style.Theme_Material_Dialog_Alert);
+        LinearLayout box = new LinearLayout(dc);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(pad, Ui.dp(this, 8), pad, 0);
-        Switch vib = settingSwitch("バイブレーション", settings.vibration());
+        Switch vib = settingSwitch(dc, "バイブレーション", settings.vibration());
         vib.setOnCheckedChangeListener((b, on) -> settings.setVibration(on));
-        Switch snd = settingSwitch("キー音", settings.sound());
+        Switch snd = settingSwitch(dc, "キー音", settings.sound());
         snd.setOnCheckedChangeListener((b, on) -> {
             settings.setSound(on);
             if (on) click.play();
         });
         box.addView(vib);
         box.addView(snd);
-        TextView hint = new TextView(this);
+        TextView hint = new TextView(dc);
         hint.setText("「=」長押しでこの設定を開きます");
         hint.setTextSize(12);
         hint.setTextColor(0xFF8C9097);
@@ -155,8 +172,8 @@ public final class MainActivity extends Activity {
                 .show();
     }
 
-    private Switch settingSwitch(String label, boolean on) {
-        Switch s = new Switch(this);
+    private Switch settingSwitch(android.content.Context dc, String label, boolean on) {
+        Switch s = new Switch(dc);
         s.setText(label);
         s.setTextSize(16);
         s.setChecked(on);

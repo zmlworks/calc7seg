@@ -40,6 +40,24 @@ final class Ui {
         root.requestApplyInsets();
     }
 
+    /** Dark status/navigation bar icons over the light-grey body. */
+    @SuppressWarnings("deprecation")
+    static void lightBars(Activity a) {
+        Window w = a.getWindow();
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController c = w.getInsetsController();
+            if (c != null) {
+                int f = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                c.setSystemBarsAppearance(f, f);
+            }
+        } else {
+            View d = w.getDecorView();
+            d.setSystemUiVisibility(d.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        }
+    }
+
     static int dp(android.content.Context c, float dp) {
         return Math.round(dp * c.getResources().getDisplayMetrics().density);
     }

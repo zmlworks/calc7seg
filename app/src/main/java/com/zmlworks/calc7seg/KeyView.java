@@ -140,25 +140,25 @@ final class KeyView extends View {
         int f = pressed ? KeyView.darken(face, 0.9f) : face;
 
         // 1. recessed well: darker opening with an inner shadow under its top edge and a lit lower lip
-        p.setColor(0x3C000000);
+        p.setColor(0x30000000);                                  // well in light-grey resin: a soft grey recess
         c.drawRoundRect(well, wellR, wellR, p);
         c.save();
         Path wp = new Path();
         wp.addRoundRect(well, wellR, wellR, Path.Direction.CW);
         c.clipPath(wp);
         p.setColor(0xFF000000);                               // opaque paint: shader alpha only
-        p.setShader(new LinearGradient(0, well.top, 0, well.top + well.height() * 0.45f, 0x50000000, 0x00000000, Shader.TileMode.CLAMP));
+        p.setShader(new LinearGradient(0, well.top, 0, well.top + well.height() * 0.45f, 0x48000000, 0x00000000, Shader.TileMode.CLAMP));
         c.drawRect(well, p);
         p.setShader(null);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(m * 0.05f);
-        p.setColor(0x58000000);
+        p.setColor(0x44000000);
         p.setMaskFilter(new BlurMaskFilter(m * 0.03f, BlurMaskFilter.Blur.NORMAL));
         c.drawRoundRect(well, wellR, wellR, p);
         p.setMaskFilter(null);
         c.restore();
         p.setStrokeWidth(Math.max(1f, m * 0.008f));
-        p.setColor(0x1CFFFFFF);                                  // light catching the lower lip of the well
+        p.setColor(0x80FFFFFF);                                  // light catching the lower lip of the well
         c.drawArc(new RectF(well.left, well.bottom - 2 * wellR, well.left + 2 * wellR, well.bottom), 90, 90, false, p);
         c.drawArc(new RectF(well.right - 2 * wellR, well.bottom - 2 * wellR, well.right, well.bottom), 0, 90, false, p);
         c.drawLine(well.left + wellR, well.bottom, well.right - wellR, well.bottom, p);
