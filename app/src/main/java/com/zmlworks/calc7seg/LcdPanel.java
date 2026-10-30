@@ -25,10 +25,10 @@ import android.widget.FrameLayout;
  * the panel's own bounds by the shear amount, so the parent must not clip children.
  */
 public final class LcdPanel extends FrameLayout {
-    /** Top-edge shift as a fraction of the panel width (≈16 px on a 1080 px screen, ≈3°). */
-    static final float SHEAR = 0.016f;
+    /** Top-edge shift as a fraction of the panel width (≈23 px on a 1080 px screen, ≈4°). */
+    static final float SHEAR = 0.0225f;
     /** Apparent height of the raised panel (cos of the lift angle). */
-    static final float LIFT_SCALE = 0.9f;
+    static final float LIFT_SCALE = 0.98f;
     private static final int SHADOW_STEPS = 8;
 
     private final float dp;
@@ -56,7 +56,7 @@ public final class LcdPanel extends FrameLayout {
         GradientDrawable bz = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0xFF0F1013, 0xFF1C1D21});
         bz.setCornerRadius(radius);
-        bz.setStroke(Math.round(dp), 0xFF6A6966);   // moulded edge where the dark bezel meets the grey body
+        bz.setStroke(Math.round(dp), 0xFF63625F);   // moulded edge where the dark bezel meets the grey body
         setBackground(bz);
         int bp = Math.round(padDp * dp);
         setPadding(bp, bp, bp, bp);
@@ -77,7 +77,7 @@ public final class LcdPanel extends FrameLayout {
         r.set(0, 0, w, h);
         outline.addRoundRect(r, radius, radius, Path.Direction.CW);
         // shallow recess floor: only a little darker than the body, a touch deeper toward the top
-        recessFill.setShader(new LinearGradient(0, 0, 0, h, new int[]{0xFFA9A7A2, 0xFFB8B6B1, 0xFFC0BEB9},
+        recessFill.setShader(new LinearGradient(0, 0, 0, h, new int[]{0xFF9D9B97, 0xFFABA9A5, 0xFFB3B1AC},
                 new float[]{0, 0.4f, 1}, Shader.TileMode.CLAMP));
         topShade = new LinearGradient(0, 0, 0, 10 * dp, 0x38000000, 0x00000000, Shader.TileMode.CLAMP);
         leftShade = new LinearGradient(0, 0, 6 * dp, 0, 0x30000000, 0x00000000, Shader.TileMode.CLAMP);
@@ -118,7 +118,7 @@ public final class LcdPanel extends FrameLayout {
         c.restore();
         // recess rim moulded into the body
         line.setStrokeWidth(dp);
-        line.setColor(0xFF8E8C88);
+        line.setColor(0xFF84827F);
         r.set(dp / 2, dp / 2, w - dp / 2, h - dp / 2);
         c.drawRoundRect(r, radius, radius, line);
 

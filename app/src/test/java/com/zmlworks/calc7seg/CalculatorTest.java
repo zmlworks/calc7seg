@@ -261,7 +261,7 @@ public class CalculatorTest {
 
     @Test public void lcdState() {
         Lcd.State e = Lcd.State.of(c);
-        assertEquals("0.", e.mem);                               // memory panel shows a lit "0." when empty
+        assertEquals("", e.mem);                                 // memory panel blank (ghosts only) when empty
         assertEquals(0, e.op);
         c.keys("12[M_PLUS]3+4");
         Lcd.State s = Lcd.State.of(c);
@@ -270,10 +270,13 @@ public class CalculatorTest {
         assertEquals('+', s.op);
         assertFalse(s.error);
         c.keys("=[MC]");
-        assertEquals("0.", Lcd.State.of(c).mem);
+        assertEquals("", Lcd.State.of(c).mem);
         c.keys("5[M_MINUS]");
         assertEquals("-5.", Lcd.State.of(c).mem);
-        assertArrayEquals(new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0, Lcd.DIGIT[0]}, Lcd.layout(new Calculator().memoryDisplay()).seg);
+        assertArrayEquals(new int[Lcd.CELLS], Lcd.layout(new Calculator().memoryDisplay()).seg);
+        Lcd.Frame blank = Lcd.layout("");
+        assertFalse(blank.neg);
+        for (int i = 0; i < Lcd.CELLS; i++) assertFalse(blank.dp[i]);
     }
 
     @Test public void operatorAnnunciatorMapping() {
@@ -313,11 +316,16 @@ public class CalculatorTest {
             assertTrue(mid > w * 0.5f && mid < w * 0.65f);          // centre, slightly right
             // E: cut-out block of operator size, far left of the top row, clear of everything
             assertEquals(hb, m.blockHalf(), 1e-4);
-            assertEquals(cy, m.eCy, 1e-4);
+            float hh = m.eHalfH();
+            assertEquals(1.5f * hb, hh, 1e-4);                      // 1.5x as tall
+            assertEquals(cy - hb, m.eCy - hh, 1e-4);                // top aligned with the operators
+            assertTrue(m.eCy - hh > 0);
             assertTrue(m.eCx - hb > 0);                             // inside the glass
             assertTrue(m.eCx + hb < c0 - hb - m.annS);              // well left of the "+" block
-            assertTrue(m.eCy + hb < m.d.tickTop());                 // above the sign bar and digits
             assertTrue(m.eCx < m.d.cellLeft(0));                    // over the sign slot, far left
+            assertTrue(m.eCx + hb < m.d.cellLeft(0));               // clear of the first digit cell
+            // clear of the sign-slot minus bar (segment g, centred at mid cell height)
+            assertTrue(m.eCy + hh < m.d.top + m.d.cellH / 2 - m.d.th * 1.5f);
             // sign slot is narrow (middle bar only) and digits are back to the 0.8.0 size
             assertEquals(m.d.cellW * 0.9f, m.d.signW, 1e-3);
             assertEquals((w - 2 * m.pad) / Lcd.Digits.unitsWide(), m.d.cellW, 1e-3);
@@ -435,6 +443,9 @@ public class CalculatorTest {
         assertEquals(Calculator.Key.SUB, KeyLayout.KEYS[19]);
         assertArrayEquals(digitsRow6, java.util.Arrays.copyOfRange(KeyLayout.KEYS, 20, 24));
         assertEquals(Calculator.Key.EQ, KeyLayout.KEYS[27]);
+        // BS √ +/- are short keys in the ÷ row; nothing else is
+        for (int i = 0; i < KeyLayout.KEYS.length; i++)
+            assertEquals(i == 8 || i == 9 || i == 10, KeyLayout.isShortInFullRow(i));
         assertEquals(java.util.EnumSet.allOf(Calculator.Key.class).size(), new java.util.HashSet<>(java.util.Arrays.asList(KeyLayout.KEYS)).size());
     }
 
@@ -489,6 +500,38 @@ public class CalculatorTest {
         assertTrue(new Settings(store).sound());
         new Settings(store).setRaisedLcd(false);
         assertFalse(new Settings(store).raisedLcd());
+    }
+
+    @Test public void memoryShownOnceUsedEvenAtZero() {
+        assertEquals("", c.memoryDisplay());                     // fresh: blank
+        c.keys("2[M_PLUS]");
+        assertEquals("2.", c.memoryDisplay());
+        c.keys("2[M_MINUS]");
+        assertTrue(c.hasMemory());                               // in use although the value is 0
+        assertEquals("0.", c.memoryDisplay());
+        c.keys("[CA]");
+        assertEquals("0.", c.memoryDisplay());                   // CA keeps it
+        Calculator d = new Calculator();                          // persisted with the value
+        assertTrue(d.restore(c.save()));
+        assertTrue(d.hasMemory());
+        assertEquals("0.", d.memoryDisplay());
+        c.keys("[MC]");
+        assertFalse(c.hasMemory());
+        assertEquals("", c.memoryDisplay());
+        Calculator e = new Calculator();
+        assertTrue(e.restore(c.save()));
+        assertEquals("", e.memoryDisplay());
+        c.keys("[MR]");                                          // MR of empty memory recalls 0, stays blank
+        assertEquals("0.", c.display());
+        assertEquals("", c.memoryDisplay());
+        c.keys("0[M_PLUS]");                                     // M+ of 0 still puts memory in use
+        assertEquals("0.", c.memoryDisplay());
+        // 0.9.1 state (13 fields): in use iff non-zero
+        String v091 = String.join("\u001f", "0", "5", "0", "0", "0", "0", "0", "0", "0", "0.", "e", "0", "0");
+        Calculator o = new Calculator();
+        assertTrue(o.restore(v091));
+        assertFalse(o.hasMemory());
+        assertEquals("", o.memoryDisplay());
     }
 
     @Test public void saveRestore() {

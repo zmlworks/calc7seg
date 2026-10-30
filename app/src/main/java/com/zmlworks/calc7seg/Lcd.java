@@ -132,7 +132,7 @@ final class Lcd {
 
     /** What the main LCD shows (the memory value lives on its own panel, see {@link #renderMemory}). */
     static final class State {
-        String main = "0.", mem = "0.";
+        String main = "0.", mem = "";
         boolean error;
         char op;
 
@@ -220,8 +220,15 @@ final class Lcd {
             float blockW = 3 * annPitch + annS;
             annLeft = width * 0.585f - blockW / 2;      // operator row: centre, slightly right
             eCx = pad * 1.3f + annS / 2;                // where "+" sat in 0.8.0
-            eCy = annTop + annS / 2;
+            // 1.5x as tall as an operator block: top edge aligned with them, extra height hangs down
+            // beside the digit tops, over the (empty) upper half of the narrow sign slot
+            eCy = annTop + annS / 2 - blockHalf() + eHalfH();
         }
+
+        /** Half height of the E block (1.5x an operator block). */
+        float eHalfH() { return blockHalf() * E_TALL; }
+
+        static final float E_TALL = 1.5f;
 
         /** Half side of a cut-out block. */
         float blockHalf() { return annS * 0.58f; }
@@ -251,10 +258,10 @@ final class Lcd {
             int bg = bgAt(cy / m.height);
             for (float[] poly : opSymbol(OPS.charAt(i), cx, cy, m.annS * 0.8f)) p.poly(poly, bg);
         }
-        float hb = m.blockHalf(), ex = m.eCx, ey = m.eCy;
-        p.poly(new float[]{ex - hb, ey - hb, ex + hb, ey - hb, ex + hb, ey + hb, ex - hb, ey + hb}, s.error ? ON : GHOST);
+        float hb = m.blockHalf(), hh = m.eHalfH(), ex = m.eCx, ey = m.eCy;
+        p.poly(new float[]{ex - hb, ey - hh, ex + hb, ey - hh, ex + hb, ey + hh, ex - hb, ey + hh}, s.error ? ON : GHOST);
         int ebg = bgAt(ey / m.height);
-        for (float[] poly : letterE(ex, ey, m.annS * 0.8f)) p.poly(poly, ebg);
+        for (float[] poly : letterE(ex, ey, m.annS * 0.8f, Metrics.E_TALL)) p.poly(poly, ebg);
         digits(p, layout(s.main), m.d);
     }
 
@@ -322,10 +329,10 @@ final class Lcd {
         return out;
     }
 
-    /** Cut-out "E" centred in a box of side s (same stroke as the operator symbols). */
-    static java.util.List<float[]> letterE(float cx, float cy, float s) {
+    /** Cut-out "E" centred in a box of side s, stretched {@code tall}x vertically (stroke kept). */
+    static java.util.List<float[]> letterE(float cx, float cy, float s, float tall) {
         java.util.List<float[]> out = new java.util.ArrayList<>();
-        float h = s * 0.9f, t = s * 0.2f, w = s * 0.62f, l = cx - w / 2;
+        float h = s * 0.9f * tall, t = s * 0.2f, w = s * 0.62f, l = cx - w / 2;
         out.add(rect(l + t / 2, cy, t, h, 0));                       // spine
         out.add(rect(cx, cy - h / 2 + t / 2, w, t, 0));              // top
         out.add(rect(cx - w * 0.06f, cy, w * 0.88f, t, 0));          // middle, a bit shorter

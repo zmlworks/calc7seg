@@ -47,6 +47,8 @@ public final class Calculator {
     private BigDecimal x = BigDecimal.ZERO;        // value shown when not typing
     private BigDecimal constVal = BigDecimal.ZERO; // operand repeated by "="
     private BigDecimal memory = BigDecimal.ZERO;
+    /** Memory "in use": set by M+ / M- (even if the sum is 0), cleared only by MC. */
+    private boolean memInUse;
     private BigDecimal ans = BigDecimal.ZERO;      // last "=" result
     private char op;                               // pending operator (+ - × ÷) or 0
     private char constOp;                          // operator repeated by "=" or 0
@@ -78,7 +80,7 @@ public final class Calculator {
                 case BS: backspace(); break;
                 case CA: clearAll(); break;
                 case CE: clearEntry(); break;
-                case MC: memory = BigDecimal.ZERO; break;
+                case MC: memory = BigDecimal.ZERO; memInUse = false; break;
                 case MR: x = memory; typing = false; xNew = true; break;
                 case M_PLUS: memoryAdd(false); break;
                 case M_MINUS: memoryAdd(true); break;
@@ -219,6 +221,7 @@ public final class Calculator {
         if (op != 0) equals();
         BigDecimal m = minus ? memory.subtract(x) : memory.add(x);
         memory = fit(m);
+        memInUse = true;
         typing = false;
         xNew = false;
     }
@@ -309,11 +312,12 @@ public final class Calculator {
     }
 
     public boolean isError() { return error; }
-    public boolean hasMemory() { return memory.signum() != 0; }
+    /** True once M+ / M- has been used, until MC (even when the stored value is 0). */
+    public boolean hasMemory() { return memInUse; }
     public BigDecimal memory() { return memory; }
     public BigDecimal ans() { return ans; }
-    /** Memory value as LCD text ("0." when empty). */
-    public String memoryDisplay() { return format(memory); }
+    /** Memory value as LCD text; "" (blank panel) when memory is not in use. */
+    public String memoryDisplay() { return memInUse ? format(memory) : ""; }
     /** Pending operator ('+', '-', '×', '÷') for the LCD annunciator, or 0 (none / after =, CA, E). */
     public char pendingOp() { return op; }
 
@@ -323,13 +327,13 @@ public final class Calculator {
         return String.join("\u001f", acc.toPlainString(), x.toPlainString(), constVal.toPlainString(),
                 memory.toPlainString(), String.valueOf((int) op), String.valueOf((int) constOp),
                 bit(typing), bit(xNew), bit(error), errorText, "e" + entry, bit(entryNeg),
-                ans.toPlainString());
+                ans.toPlainString(), bit(memInUse));
     }
 
     public boolean restore(String s) {
         if (s == null) return false;
         String[] p = s.split("\u001f", -1);
-        if (p.length != 12 && p.length != 13) return false; // 12 = v0.1.0 (no Ans)
+        if (p.length < 12 || p.length > 14) return false; // 12 = v0.1.0 (no Ans), 13 = no in-use flag
         try {
             BigDecimal a = new BigDecimal(p[0]), xx = new BigDecimal(p[1]), c = new BigDecimal(p[2]),
                     m = new BigDecimal(p[3]);
@@ -342,10 +346,12 @@ public final class Calculator {
             entry.append(p[10].substring(1));
             entryNeg = p[11].equals("1");
             ans = p.length > 12 ? new BigDecimal(p[12]) : BigDecimal.ZERO;
+            memInUse = p.length > 13 ? p[13].equals("1") : m.signum() != 0;
             return true;
         } catch (RuntimeException e) {
             clearAll();
             memory = ans = BigDecimal.ZERO;
+            memInUse = false;
             return false;
         }
     }

@@ -33,7 +33,7 @@ public final class LcdView extends View implements Lcd.Painter {
 
     public void show(Lcd.State s) {
         state = s;
-        setContentDescription(memoryPanel ? "memory " + s.mem
+        setContentDescription(memoryPanel ? (s.mem.isEmpty() ? "memory empty" : "memory " + s.mem)
                 : (s.error ? "E " : "") + (s.op != 0 ? s.op + " " : "") + s.main);
         invalidate();
     }

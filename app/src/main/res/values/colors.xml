@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Super Famicom-style pale warm-grey resin -->
-    <color name="body">#FFCECCC7</color>
-    <color name="body_top">#FFD6D4D0</color>
-    <color name="body_bottom">#FFC3C1BC</color>
+    <!-- Super Famicom-style warm-grey resin (0.9.2: ~7% darker) -->
+    <color name="body">#FFC0BEB9</color>
+    <color name="body_top">#FFC7C5C1</color>
+    <color name="body_bottom">#FFB5B3AF</color>
 </resources>

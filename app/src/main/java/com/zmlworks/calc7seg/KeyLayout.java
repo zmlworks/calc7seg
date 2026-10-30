@@ -29,4 +29,10 @@ final class KeyLayout {
     };
 
     static int rows() { return KEYS.length / COLUMNS; }
+
+    /** BS, √ and +/- are short keys (like the function row) sitting in the full-height ÷ row. */
+    static boolean isShortInFullRow(int idx) {
+        Calculator.Key k = KEYS[idx];
+        return k == BS || k == SQRT || k == NEG;
+    }
 }

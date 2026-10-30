@@ -14,10 +14,12 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
-    /** Super Famicom-style pale warm-grey ABS; vertical shading top → bottom. */
-    static final int BODY = 0xFFCECCC7, BODY_TOP = 0xFFD6D4D0, BODY_BOTTOM = 0xFFC3C1BC;
+    /** Super Famicom-style warm-grey ABS (0.9.2: ~7% darker); vertical shading top → bottom. */
+    static final int BODY = 0xFFC0BEB9, BODY_TOP = 0xFFC7C5C1, BODY_BOTTOM = 0xFFB5B3AF;
     /** Pad-printed body graphics: charcoal brand, accent model line, mid-grey captions. */
-    static final int PRINT = 0xFF34363A, PRINT_ACCENT = 0xFF9E3A1A, PRINT_SUB = 0xFF56585D;
+    static final int PRINT = 0xFF2C2E32, PRINT_ACCENT = 0xFF962F12, PRINT_SUB = 0xFF4A4C51;
+    /** Short-key height relative to a full key row (memory / function rows and BS √ +/-). */
+    static final float SHORT_ROW = 0.82f;
     private static final int NUM = 0xFF26282D, NUM_T = 0xFFF2F2EE;
     private static final int OPR = 0xFF4B5159, OPR_T = 0xFFFFFFFF;
     private static final int MEM = 0xFF383C42, MEM_T = 0xFFE4E6E9;
@@ -103,10 +105,19 @@ public final class MainActivity extends Activity {
                         return true;
                     });
                 }
-                line.addView(kv, new LinearLayout.LayoutParams(0, -1, 1));
+                if (KeyLayout.isShortInFullRow(idx)) {
+                    // BS √ +/-: same height as the short keys above, top aligned with ÷, body below
+                    LinearLayout col1 = new LinearLayout(this);
+                    col1.setOrientation(LinearLayout.VERTICAL);
+                    col1.setWeightSum(1f);
+                    col1.addView(kv, new LinearLayout.LayoutParams(-1, 0, SHORT_ROW));
+                    line.addView(col1, new LinearLayout.LayoutParams(0, -1, 1));
+                } else {
+                    line.addView(kv, new LinearLayout.LayoutParams(0, -1, 1));
+                }
             }
             // memory / func rows a bit shorter, like real calculators
-            pad4.addView(line, new LinearLayout.LayoutParams(-1, 0, row < 2 ? 0.82f : 1f));
+            pad4.addView(line, new LinearLayout.LayoutParams(-1, 0, row < 2 ? SHORT_ROW : 1f));
         }
         root.addView(pad4, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -142,7 +153,7 @@ public final class MainActivity extends Activity {
         GradientDrawable bz = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0xFF0F1013, 0xFF1C1D21});
         bz.setCornerRadius(Ui.dp(this, radiusDp));
-        bz.setStroke(Ui.dp(this, 1), 0xFF6A6966);   // moulded edge where the dark bezel meets the grey body
+        bz.setStroke(Ui.dp(this, 1), 0xFF63625F);   // moulded edge where the dark bezel meets the grey body
         bezel.setBackground(bz);
         int bp = Ui.dp(this, padDp);
         bezel.setPadding(bp, bp, bp, bp);
