@@ -311,12 +311,16 @@ public class CalculatorTest {
                 assertTrue(c0 + i * m.annPitch + hb < c0 + (i + 1) * m.annPitch - hb);
             float mid = (c0 - hb + c0 + 3 * m.annPitch + hb) / 2;
             assertTrue(mid > w * 0.5f && mid < w * 0.65f);          // centre, slightly right
-            // E: far left, tall (just under the digit height), clear of the sign cell / ghost digits
-            assertTrue(m.eH < m.d.cellH && m.eH > m.d.cellH * 0.8f);
-            assertTrue(m.eH > m.eW * 2f);                           // narrow, upright
-            assertTrue(m.eL >= 0 && m.eL < c0 - hb);
-            assertTrue(m.eRight() + m.d.cellW * 0.15f < m.d.cellLeft(-1));
-            assertTrue(m.eT + m.eH < m.d.top + m.d.cellH);
+            // E: cut-out block of operator size, far left of the top row, clear of everything
+            assertEquals(hb, m.blockHalf(), 1e-4);
+            assertEquals(cy, m.eCy, 1e-4);
+            assertTrue(m.eCx - hb > 0);                             // inside the glass
+            assertTrue(m.eCx + hb < c0 - hb - m.annS);              // well left of the "+" block
+            assertTrue(m.eCy + hb < m.d.tickTop());                 // above the sign bar and digits
+            assertTrue(m.eCx < m.d.cellLeft(0));                    // over the sign slot, far left
+            // sign slot is narrow (middle bar only) and digits are back to the 0.8.0 size
+            assertEquals(m.d.cellW * 0.9f, m.d.signW, 1e-3);
+            assertEquals((w - 2 * m.pad) / Lcd.Digits.unitsWide(), m.d.cellW, 1e-3);
             // rightmost digit stays inside the glass
             assertTrue(m.d.cellLeft(Lcd.CELLS - 1) + m.d.cellW + m.d.cellH * m.d.slant < w);
         }
@@ -365,13 +369,25 @@ public class CalculatorTest {
         lit.clear();
         Lcd.render(rec, m, st);
         for (float[] p : lit) assertFalse(p[0] >= l && p[0] <= r);
-        // E lights 5 segments only in the error state
+        // sign slot (middle bar only) lights only for a negative that fills all 10 digits
+        float sl = m.d.cellLeft(-1), sr = m.d.cellLeft(0) - m.d.cellW * 0.05f;
+        st.main = "-1234567890.";
+        lit.clear();
+        Lcd.render(rec, m, st);
+        int slot = 0;
+        for (float[] p : lit) if (p[0] >= sl && p[0] < sr && p[1] > m.d.top) slot++;
+        assertEquals(1, slot);
+        st.main = "-123.";
+        lit.clear();
+        Lcd.render(rec, m, st);
+        for (float[] p : lit) assertFalse(p[0] >= sl && p[0] < sr && p[1] > m.d.top);
+        // E block lights only in the error state
         st.error = true;
         lit.clear();
         Lcd.render(rec, m, st);
         int eSegs = 0;
-        for (float[] p : lit) if (p[0] < m.eRight()) eSegs++;
-        assertEquals(5, eSegs);
+        for (float[] p : lit) if (p[0] < m.eCx + m.blockHalf() && p[1] < m.d.top) eSegs++;
+        assertEquals(1, eSegs);                                      // one dark block, E cut out
     }
 
     @Test public void cutOutColourMatchesLcdGradient() {

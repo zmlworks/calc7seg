@@ -170,7 +170,7 @@ final class Lcd {
             cellH = cellW * aspect;
             th = cellW * thick;
             gap = th * 0.11f;
-            signW = floatSign ? pitch : cellW * 0.9f;
+            signW = cellW * 0.9f;                      // sign slot: just room for a middle bar
             dpR = th * 0.55f;
             left = right - (signW + CELLS * pitch) + (pitch - cellW) * 0.1f;
         }
@@ -183,9 +183,9 @@ final class Lcd {
 
         static float unitsWide() { return 0.9f + CELLS * 1.32f; }
 
-        /** Left x of digit cell i (-1 = sign slot; with floatSign it is an ordinary cell). */
+        /** Left x of digit cell i (-1 = the narrow sign slot). */
         float cellLeft(int i) {
-            return floatSign ? left + (i + 1) * pitch : left + signW + i * pitch;
+            return i < 0 ? left - cellW * 0.1f : left + signW + i * pitch;
         }
     }
 
@@ -193,25 +193,24 @@ final class Lcd {
      * Main LCD, derived from the width only:
      * <pre>
      *  [E]          [+][−][×][÷]          (annunciators: centre, slightly right)
-     *  [E] [8] 8 8 8 8 8 8 8 8 8 8        ([8] = sign cell: only its middle bar is ever lit)
+     *  [E]            [+][−][×][÷]        (cut-out blocks; operators centre, slightly right)
+     *   -  8 8 8 8 8 8 8 8 8 8               (- = sign slot: middle bar only, for 10-digit negatives)
      * </pre>
-     * E is a narrow, tall segment letter in its own column at the far left (top aligned with the
-     * annunciators, a little shorter than the digits), so it never touches a digit or ghost.
+     * The minus otherwise floats in the cell left of the most significant digit. E is a cut-out block
+     * like the operators, at the far left of the top row, above the sign slot.
      */
     static final class Metrics {
         final float width, height, pad;
         final Digits d;
         final float annTop, annS, annPitch, annLeft;
-        /** E letter cell: left, top, width, height, stroke thickness. */
-        final float eL, eT, eW, eH, eTh;
-
-        static final float E_UNITS = 0.9f, E_GAP = 0.3f;
+        /** E block centre (same size and row as the operator blocks). */
+        final float eCx, eCy;
 
         Metrics(float width) {
             this.width = width;
             pad = width * 0.035f;
             float iw = width - 2 * pad;
-            float cellW = iw / (E_UNITS + E_GAP + (CELLS + 1) * 1.32f);
+            float cellW = iw / Digits.unitsWide();     // same digit size as 0.8.0
             annS = cellW * 0.62f;                       // annunciator square
             annTop = pad * 0.85f;
             annPitch = annS * 1.45f;
@@ -220,15 +219,12 @@ final class Lcd {
             height = top + d.cellH + pad;
             float blockW = 3 * annPitch + annS;
             annLeft = width * 0.585f - blockW / 2;      // operator row: centre, slightly right
-            eL = pad;
-            eT = annTop + annS * 0.05f;
-            eH = d.cellH * 0.9f;                        // just short of the digit height
-            eW = cellW * E_UNITS;
-            eTh = d.th * 0.7f;
+            eCx = pad * 1.3f + annS / 2;                // where "+" sat in 0.8.0
+            eCy = annTop + annS / 2;
         }
 
-        /** Rightmost x the slanted E reaches (its top-right corner). */
-        float eRight() { return eL + eW + eH * d.slant; }
+        /** Half side of a cut-out block. */
+        float blockHalf() { return annS * 0.58f; }
     }
 
     /** Small memory panel: 10 digits only. */
@@ -255,12 +251,10 @@ final class Lcd {
             int bg = bgAt(cy / m.height);
             for (float[] poly : opSymbol(OPS.charAt(i), cx, cy, m.annS * 0.8f)) p.poly(poly, bg);
         }
-        int ec = s.error ? ON : GHOST;
-        for (int sg : new int[]{0, 3, 4, 5, 6}) {            // E = a, d, e, f, g; middle bar a bit short
-            float[] pt = segment(sg, m.eL, m.eT, m.eW, m.eH, m.eTh, m.eTh * 0.11f, m.d.slant);
-            if (sg == 6) { float cut = (pt[6] - pt[0]) * 0.1f; pt[6] -= cut; pt[4] -= cut; pt[8] -= cut; }
-            p.poly(pt, ec);
-        }
+        float hb = m.blockHalf(), ex = m.eCx, ey = m.eCy;
+        p.poly(new float[]{ex - hb, ey - hb, ex + hb, ey - hb, ex + hb, ey + hb, ex - hb, ey + hb}, s.error ? ON : GHOST);
+        int ebg = bgAt(ey / m.height);
+        for (float[] poly : letterE(ex, ey, m.annS * 0.8f)) p.poly(poly, ebg);
         digits(p, layout(s.main), m.d);
     }
 
@@ -280,16 +274,9 @@ final class Lcd {
     }
 
     private static void digits(Painter p, Frame f, Digits d) {
-        if (d.floatSign) {                                     // spare sign cell: full ghost 8, lit g only
-            float l = d.cellLeft(-1);
-            for (int sg = 0; sg < 7; sg++) {
-                float[] pt = segment(sg, l, d.top, d.cellW, d.cellH, d.th, d.gap, d.slant);
-                p.poly(pt, GHOST);
-                if (sg == 6 && f.signCell == -1) p.poly(pt, ON);
-            }
-        } else {
-            p.poly(segment(6, d.left - d.cellW * 0.1f, d.top, d.signW, d.cellH, d.th, d.gap, d.slant), f.neg ? ON : GHOST);
-        }
+        // narrow sign slot: a middle bar only. Memory: the minus; main LCD: only for 10-digit negatives
+        boolean slotLit = d.floatSign ? f.signCell == -1 : f.neg;
+        p.poly(segment(6, d.cellLeft(-1), d.top, d.signW, d.cellH, d.th, d.gap, d.slant), slotLit ? ON : GHOST);
         for (int i = 0; i < CELLS; i++) {
             float l = d.cellLeft(i);
             int mask = f.seg[i] | (d.floatSign && f.signCell == i ? MINUS : 0);
@@ -332,6 +319,17 @@ final class Lcd {
             default: // '-'
                 out.add(rect(cx, cy, len, t, 0));
         }
+        return out;
+    }
+
+    /** Cut-out "E" centred in a box of side s (same stroke as the operator symbols). */
+    static java.util.List<float[]> letterE(float cx, float cy, float s) {
+        java.util.List<float[]> out = new java.util.ArrayList<>();
+        float h = s * 0.9f, t = s * 0.2f, w = s * 0.62f, l = cx - w / 2;
+        out.add(rect(l + t / 2, cy, t, h, 0));                       // spine
+        out.add(rect(cx, cy - h / 2 + t / 2, w, t, 0));              // top
+        out.add(rect(cx - w * 0.06f, cy, w * 0.88f, t, 0));          // middle, a bit shorter
+        out.add(rect(cx, cy + h / 2 - t / 2, w, t, 0));              // bottom
         return out;
     }
 
