@@ -158,7 +158,7 @@ final class KeyView extends View {
         p.setMaskFilter(null);
         c.restore();
         p.setStrokeWidth(Math.max(1f, m * 0.008f));
-        p.setColor(0x80FFFFFF);                                  // light catching the lower lip of the well
+        p.setColor(0x70FFFFFF);                                  // light catching the lower lip of the well
         c.drawArc(new RectF(well.left, well.bottom - 2 * wellR, well.left + 2 * wellR, well.bottom), 90, 90, false, p);
         c.drawArc(new RectF(well.right - 2 * wellR, well.bottom - 2 * wellR, well.right, well.bottom), 0, 90, false, p);
         c.drawLine(well.left + wellR, well.bottom, well.right - wellR, well.bottom, p);

@@ -14,10 +14,10 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
-    /** Light-grey office-calculator resin, slightly warm; vertical shading top → bottom. */
-    static final int BODY = 0xFFD6D4CE, BODY_TOP = 0xFFDEDCD6, BODY_BOTTOM = 0xFFC8C6BF;
+    /** Super Famicom-style pale warm-grey ABS; vertical shading top → bottom. */
+    static final int BODY = 0xFFCECCC7, BODY_TOP = 0xFFD6D4D0, BODY_BOTTOM = 0xFFC3C1BC;
     /** Pad-printed body graphics: charcoal brand, accent model line, mid-grey captions. */
-    static final int PRINT = 0xFF3A3C40, PRINT_ACCENT = 0xFFA8401C, PRINT_SUB = 0xFF5E6166;
+    static final int PRINT = 0xFF34363A, PRINT_ACCENT = 0xFF9E3A1A, PRINT_SUB = 0xFF56585D;
     private static final int NUM = 0xFF26282D, NUM_T = 0xFFF2F2EE;
     private static final int OPR = 0xFF4B5159, OPR_T = 0xFFFFFFFF;
     private static final int MEM = 0xFF383C42, MEM_T = 0xFFE4E6E9;
@@ -130,7 +130,7 @@ public final class MainActivity extends Activity {
         GradientDrawable bz = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0xFF0F1013, 0xFF1C1D21});
         bz.setCornerRadius(Ui.dp(this, radiusDp));
-        bz.setStroke(Ui.dp(this, 1), 0xFF6F6D68);   // moulded edge where the dark bezel meets the grey body
+        bz.setStroke(Ui.dp(this, 1), 0xFF6A6966);   // moulded edge where the dark bezel meets the grey body
         bezel.setBackground(bz);
         int bp = Ui.dp(this, padDp);
         bezel.setPadding(bp, bp, bp, bp);

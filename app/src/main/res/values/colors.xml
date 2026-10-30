@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="body">#FFD6D4CE</color>
-    <color name="body_top">#FFDEDCD6</color>
-    <color name="body_bottom">#FFC8C6BF</color>
+    <!-- Super Famicom-style pale warm-grey resin -->
+    <color name="body">#FFCECCC7</color>
+    <color name="body_top">#FFD6D4D0</color>
+    <color name="body_bottom">#FFC3C1BC</color>
 </resources>

@@ -1,33 +1,44 @@
 #!/usr/bin/env python3
-"""Generates the adaptive launcher icon (vector drawables) and a PNG preview.
+"""Generates the adaptive launcher icon (vector drawables) and, optionally, a PNG preview sheet.
 
-Motif: the app's LCD — a dark bezel on light-grey resin, a greenish LCD window with two bold italic
-7-segment digits "7'7" over faint ghost "8" segments, the thousands tick, and a lit cut-out "+"
-annunciator block (dark block, symbol cut out) next to a ghost block. Segment geometry matches
-Lcd.segment() (hexagonal, slanted).
+0.8 composition — a zoomed-in crop of the app itself (after the owner's close-up photo): the
+bottom-right corner of the main LCD fills the upper ~60 % (pale green glass, thick dark bezel with a
+rounded bottom-right corner), large lit 7-segment "0.8" with a round decimal point, ghost "8"s and
+ghost ' separators trailing off the left edge, then a strip of the SFC-grey body and the glossy top
+of the dark M+ key (with its neighbour cut off at the left) at the bottom.
 
-Outputs: res/drawable/ic_bg.xml, ic_fg.xml, ic_mono.xml; optional preview PNG path as argv[1].
-Viewport 108×108; everything important stays inside the 66 dp safe zone.
+The lit digits and the M+ label stay inside the 66-unit safe circle (centre 54,54, r 33).
+Segment geometry matches Lcd.segment() (hexagonal, slanted). The same shape list is written as
+VectorDrawable XML (res/drawable/ic_bg.xml, ic_fg.xml, ic_mono.xml) and as SVG for the preview.
+
+usage: make_icon.py [preview.png [launcher-sheet-prefix]]
 """
 import math, os, sys
 
 RES = "app/src/main/res/drawable"
-BODY_TOP, BODY_BOTTOM = "#FFE2E0DA", "#FFC6C4BD"
-BEZEL, BEZEL_EDGE = "#FF17181B", "#FF5E5C57"
-LCD_TOP, LCD_BOTTOM = "#FFB4BCA0", "#FF9AA386"
-ON = "#FF161A12"
-GHOST = "#17161A12"
-CUT = "#FFAFB79B"   # LCD colour at the annunciator height
 
-BZ = (24, 34, 84, 74, 5)     # bezel l,t,r,b,radius
-LCD = (27, 37, 81, 71, 2.6)
-CELL_W, CELL_H, TH, SLANT = 14.5, 23.0, 4.4, 0.07
+# palette (ARGB)
+BODY_TOP, BODY_MID, BODY_BOTTOM = "#FFD6D4D0", "#FFCECCC7", "#FFC3C1BC"
+BEZEL, BEZEL_HI, BEZEL_EDGE = "#FF141518", "#FF2A2C31", "#FF6A6966"
+LCD_TOP, LCD_BOTTOM = "#FFB4BCA0", "#FF9AA386"
+ON, GHOST = "#FF161A12", "#1C161A12"
+KEY_TOP, KEY_BOTTOM, KEY_WALL, KEY_RIM = "#FF4C5158", "#FF33363C", "#FF1E2024", "#33FFFFFF"
+WELL = "#40000000"
+LABEL = "#FFE4E6E9"
+
+# geometry (viewport 108)
+LCD = (-12.0, -12.0, 74.5, 54.5, 2.6)        # glass l,t,r,b,corner
+BZ_T = 5.4                                   # bezel thickness
+CELL_W, CELL_H, TH, SLANT = 15.0, 26.0, 3.9, 0.07
 GAP = TH * 0.11
-TOP = 44.5
-LEFTS = (43.5, 63.0)
-DIGIT7 = 0b0000111   # a, b, c — plain "7" reads best at launcher sizes
-ANN = (29.5, 39.5, 5.6)        # first annunciator block l,t,size
-ANN_PITCH = 7.4
+TOP = 23.5
+PITCH = 20.5
+LIT = {31.0: 0b0111111, 51.5: 0b1111111}     # cell left → segment mask ("0", "8")
+GHOST_CELLS = (-10.0, 10.5)
+DP_R = TH * 0.58
+KEY_TOP_Y = 67.5
+KEYS = ((-26.0, 36.0), (42.5, 86.0))         # key cap x-ranges (left one is cut off by the edge)
+KEY_R = 7.0
 
 
 def segment(s, l, t, w, h, th, gap, slant):
@@ -45,193 +56,222 @@ def segment(s, l, t, w, h, th, gap, slant):
     return [(x + (bottom - y) * slant, y) for x, y in p]
 
 
-def rrect(l, t, r, b, rad):
-    return (f"M{l + rad:.2f},{t:.2f}H{r - rad:.2f}A{rad},{rad} 0 0 1 {r:.2f},{t + rad:.2f}"
-            f"V{b - rad:.2f}A{rad},{rad} 0 0 1 {r - rad:.2f},{b:.2f}H{l + rad:.2f}"
-            f"A{rad},{rad} 0 0 1 {l:.2f},{b - rad:.2f}V{t + rad:.2f}A{rad},{rad} 0 0 1 {l + rad:.2f},{t:.2f}Z")
-
-
 def poly(pts):
-    return "M" + "L".join(f"{x:.2f},{y:.2f}" for x, y in pts) + "Z"
+    return "M" + "L".join(f"{x:.1f},{y:.1f}" for x, y in pts) + "Z"
 
 
-def rect(cx, cy, w, h):
-    return [(cx - w / 2, cy - h / 2), (cx + w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), (cx - w / 2, cy + h / 2)]
+def rrect(l, t, r, b, rad):
+    return (f"M{l + rad:.1f},{t:.1f}H{r - rad:.1f}A{rad},{rad} 0 0 1 {r:.1f},{t + rad:.1f}"
+            f"V{b - rad:.1f}A{rad},{rad} 0 0 1 {r - rad:.1f},{b:.1f}H{l + rad:.1f}"
+            f"A{rad},{rad} 0 0 1 {l:.1f},{b - rad:.1f}V{t + rad:.1f}A{rad},{rad} 0 0 1 {l + rad:.1f},{t:.1f}Z")
 
 
-def tick():
-    gx = LEFTS[0] + CELL_W + (LEFTS[1] - LEFTS[0] - CELL_W) * 0.45
+def circle(cx, cy, r):
+    return f"M{cx - r:.1f},{cy:.1f}A{r:.1f},{r:.1f} 0 1 0 {cx + r:.1f},{cy:.1f}A{r:.1f},{r:.1f} 0 1 0 {cx - r:.1f},{cy:.1f}Z"
+
+
+def dot(cell_left):
+    """Round decimal point after a cell (like Digits.dotY(): a little below the cell's bottom edge)."""
+    cx = cell_left + CELL_W + (PITCH - CELL_W) * 0.45
+    return circle(cx, TOP + CELL_H - DP_R * 0.35, DP_R)
+
+
+def tick(cell_left):
+    """Thousands ' between this cell and the next (like Lcd tickTop(): just above the cells)."""
+    gx = cell_left + CELL_W + (PITCH - CELL_W) * 0.45
     top = TOP - CELL_H * 0.07
     cx = gx + (TOP + CELL_H - top) * SLANT
     ln, wt, wb = CELL_H * 0.2, TH * 0.32, TH * 0.15
-    return [(cx - wt, top), (cx + wt, top), (cx + wb - ln * SLANT, top + ln), (cx - wb - ln * SLANT, top + ln)]
+    return poly([(cx - wt, top), (cx + wt, top), (cx + wb - ln * SLANT, top + ln), (cx - wb - ln * SLANT, top + ln)])
 
 
-def shapes():
-    """(kind, polygon-or-path, colour) in paint order; kind: 'poly' | 'path'."""
+def label_mplus(cx, cy, h=8.6):
+    """Bold geometric "M+" outline polygons, centred at cx,cy."""
+    s = h / 8.0
+    mw, gap, pw = 9.4 * s, 1.6 * s, 7.0 * s
+    x0 = cx - (mw + gap + pw) / 2
+    y0 = cy - h / 2
+    m = [(0, 8), (0, 0), (2.4, 0), (4.7, 4.3), (7.0, 0), (9.4, 0), (9.4, 8), (7.3, 8), (7.3, 3.6),
+         (5.5, 6.8), (3.9, 6.8), (2.1, 3.6), (2.1, 8)]
+    M = [(x0 + x * s, y0 + y * s) for x, y in m]
+    pcx, pcy, a, w = x0 + mw + gap + pw / 2, cy, pw / 2, 1.05 * s
+    P = [(pcx - w, pcy - a), (pcx + w, pcy - a), (pcx + w, pcy - w), (pcx + a, pcy - w), (pcx + a, pcy + w),
+         (pcx + w, pcy + w), (pcx + w, pcy + a), (pcx - w, pcy + a), (pcx - w, pcy + w), (pcx - a, pcy + w),
+         (pcx - a, pcy - w), (pcx - w, pcy - w)]
+    return poly(M) + poly(P)
+
+
+def grad(c0, c1, y0, y1, x0=0, x1=0):
+    return ("grad", c0, c1, x0, y0, x1, y1)
+
+
+def layers():
+    """Returns (bg, fg, mono): lists of (pathData, fill, evenOdd) where fill is '#AARRGGBB' or grad()."""
+    bg = [("M0,0h108v108h-108z", grad(BODY_TOP, BODY_BOTTOM, 0, 108), False)]
+    l, t, r, b, rad = LCD
+    bz = (l - BZ_T, t - BZ_T, r + BZ_T, b + BZ_T)
+    fg = []
+    # body detail: soft contact shadow under the raised bezel, key wells
+    fg.append((rrect(bz[0], bz[1] + 1.2, bz[2] + 0.8, bz[3] + 1.6, rad + BZ_T + 1.5), "#1A000000", False))
+    for kl, kr in KEYS:
+        fg.append((rrect(kl - 1.6, KEY_TOP_Y - 1.6, kr + 1.6, 140, KEY_R + 1.6), WELL, False))
+    # keys: side wall, cap (glossy vertical gradient), rim highlight, label
+    for kl, kr in KEYS:
+        fg.append((rrect(kl, KEY_TOP_Y, kr, 140, KEY_R), KEY_WALL, False))
+        fg.append((rrect(kl + 0.9, KEY_TOP_Y + 0.5, kr - 0.9, 140, KEY_R - 0.6), grad(KEY_TOP, KEY_BOTTOM, KEY_TOP_Y, KEY_TOP_Y + 30), False))
+        fg.append((rrect(kl + 2.2, KEY_TOP_Y + 0.9, kr - 2.2, KEY_TOP_Y + 6.5, KEY_R - 2), grad("#30FFFFFF", "#00FFFFFF", KEY_TOP_Y + 0.9, KEY_TOP_Y + 6.5), False))
+    fg.append((label_mplus((KEYS[1][0] + KEYS[1][1]) / 2 - 1.0, KEY_TOP_Y + 13.5, 7.6), LABEL, False))
+    # bezel: edge line, dark frame, faint inner lip, glass
+    fg.append((rrect(bz[0] - 0.6, bz[1] - 0.6, bz[2] + 0.6, bz[3] + 0.6, rad + BZ_T + 0.6), BEZEL_EDGE, False))
+    fg.append((rrect(*bz, rad + BZ_T), grad(BEZEL_HI, BEZEL, bz[1], bz[3]), False))
+    fg.append((rrect(l - 0.7, t - 0.7, r + 0.7, b + 0.7, rad + 0.7), "#FF0B0C0E", False))
+    fg.append((rrect(*LCD), grad(LCD_TOP, LCD_BOTTOM, 20, b), False))
     ghosts, lit = [], []
-    for l in LEFTS:
+    for cl in GHOST_CELLS:
+        ghosts += [poly(segment(sg, cl, TOP, CELL_W, CELL_H, TH, GAP, SLANT)) for sg in range(7)]
+    for cl, mask in LIT.items():
         for sg in range(7):
-            pts = segment(sg, l, TOP, CELL_W, CELL_H, TH, GAP, SLANT)
-            (lit if DIGIT7 & (1 << sg) else ghosts).append(pts)
-    al, at, asz = ANN
-    blocks = []
-    for i in range(2):
-        l = al + i * ANN_PITCH
-        blocks.append((l, at, asz))
-    return ghosts, lit, blocks
+            (lit if mask & (1 << sg) else ghosts).append(poly(segment(sg, cl, TOP, CELL_W, CELL_H, TH, GAP, SLANT)))
+    cells = list(GHOST_CELLS) + list(LIT)
+    for cl in cells:
+        ghosts.append(tick(cl))
+        if cl != 31.0:                       # the lit point follows the "0"
+            ghosts.append(dot(cl))
+    lit.append(dot(31.0))
+    fg.append(("".join(ghosts), GHOST, False))
+    fg.append(("".join(lit), ON, False))
+    # monochrome: bezel corner (frame minus glass), lit "0.8", M+ key cap with the label cut out
+    kl, kr = KEYS[1]
+    mono = [(rrect(*bz, rad + BZ_T) + rrect(*LCD), "#FFFFFFFF", True),
+            ("".join(lit), "#FFFFFFFF", False),
+            (rrect(kl, KEY_TOP_Y, kr, 140, KEY_R) + label_mplus((kl + kr) / 2 - 1.0, KEY_TOP_Y + 13.5, 7.6), "#FFFFFFFF", True)]
+    return bg, fg, mono
 
 
-def plus(l, t, s):
-    cx, cy = l + s / 2, t + s / 2
-    ln, w = s * 0.66, s * 0.17
-    return [rect(cx, cy, ln, w), rect(cx, cy, w, ln)]
+def split(shapes, limit=700):
+    """Lint (VectorPath) flags pathData over 800 chars: split multi-subpath entries into chunks."""
+    out = []
+    for d, fill, eo in shapes:
+        if len(d) <= limit or eo:
+            out.append((d, fill, eo))
+            continue
+        parts = ["M" + x for x in d.split("M") if x]
+        cur = ""
+        for part in parts:
+            if cur and len(cur) + len(part) > limit:
+                out.append((cur, fill, eo))
+                cur = ""
+            cur += part
+        out.append((cur, fill, eo))
+    return out
 
 
-def cross(l, t, s):
-    """The "+" outline as one 12-point polygon (so even-odd cuts it cleanly out of the block)."""
-    cx, cy, a, w = l + s / 2, t + s / 2, s * 0.33, s * 0.085
-    return [(cx - w, cy - a), (cx + w, cy - a), (cx + w, cy - w), (cx + a, cy - w), (cx + a, cy + w), (cx + w, cy + w),
-            (cx + w, cy + a), (cx - w, cy + a), (cx - w, cy + w), (cx - a, cy + w), (cx - a, cy - w), (cx - w, cy - w)]
+def vector_xml(shapes):
+    shapes = split(shapes)
+    out = ['<?xml version="1.0" encoding="utf-8"?>\n<!-- generated by tools/icon/make_icon.py -->\n'
+           '<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"\n'
+           '    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">\n']
+    for d, fill, eo in shapes:
+        ft = ' android:fillType="evenOdd"' if eo else ""
+        if isinstance(fill, tuple):
+            _, c0, c1, x0, y0, x1, y1 = fill
+            out.append(f'    <path android:pathData="{d}"{ft}><aapt:attr name="android:fillColor"><gradient '
+                       f'android:type="linear" android:startX="{x0}" android:startY="{y0}" android:endX="{x1}" '
+                       f'android:endY="{y1}" android:startColor="{c0}" android:endColor="{c1}"/></aapt:attr></path>\n')
+        else:
+            out.append(f'    <path android:fillColor="{fill}"{ft} android:pathData="{d}"/>\n')
+    out.append('</vector>\n')
+    return "".join(out)
 
 
-def minus(l, t, s):
-    return [rect(l + s / 2, t + s / 2, s * 0.66, s * 0.17)]
+def svg(shape_lists, clip=None, mono=None):
+    """SVG of stacked layers (viewport 0..108), optional clip path 'circle'|'squircle'|'rounded'|None,
+    showing only the visible 18..90 region when clipped (like a launcher)."""
+    defs, body, gid = [], [], 0
+
+    def col(c):
+        c = c.lstrip("#")
+        return f"#{c[2:]}", int(c[:2], 16) / 255
+
+    for shapes in shape_lists:
+        for d, fill, eo in shapes:
+            rule = ' fill-rule="evenodd"' if eo else ""
+            if mono:
+                body.append(f'<path d="{d}" fill="{mono}"{rule}/>')
+            elif isinstance(fill, tuple):
+                _, c0, c1, x0, y0, x1, y1 = fill
+                (h0, a0), (h1, a1) = col(c0), col(c1)
+                gid += 1
+                defs.append(f'<linearGradient id="g{gid}" gradientUnits="userSpaceOnUse" x1="{x0}" y1="{y0}" x2="{x1}" y2="{y1}">'
+                            f'<stop offset="0" stop-color="{h0}" stop-opacity="{a0:.3f}"/><stop offset="1" stop-color="{h1}" stop-opacity="{a1:.3f}"/></linearGradient>')
+                body.append(f'<path d="{d}" fill="url(#g{gid})"{rule}/>')
+            else:
+                h, a = col(fill)
+                body.append(f'<path d="{d}" fill="{h}" fill-opacity="{a:.3f}"{rule}/>')
+    vb = "0 0 108 108"
+    clip_el, clip_attr = "", ""
+    if clip:
+        vb = "18 18 72 72"
+        if clip == "circle":
+            shape = '<circle cx="54" cy="54" r="36"/>'
+        elif clip == "rounded":
+            shape = '<rect x="18" y="18" width="72" height="72" rx="17"/>'
+        else:   # superellipse n=4 (squircle)
+            pts = []
+            for i in range(360):
+                a = 2 * math.pi * i / 360
+                c, s = math.cos(a), math.sin(a)
+                pts.append(f"{54 + 36 * math.copysign(abs(c) ** 0.5, c):.1f},{54 + 36 * math.copysign(abs(s) ** 0.5, s):.1f}")
+            shape = f'<polygon points="{" ".join(pts)}"/>'
+        clip_el = f'<clipPath id="m">{shape}</clipPath>'
+        clip_attr = ' clip-path="url(#m)"'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}" width="512" height="512">'
+            f'<defs>{"".join(defs)}{clip_el}</defs><g{clip_attr}>{"".join(body)}</g></svg>')
 
 
 def write_xml():
-    ghosts, lit, blocks = shapes()
+    bg, fg, mono = layers()
     os.makedirs(RES, exist_ok=True)
-    gradient = lambda a, b, y0, y1: (
-        f'<aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="0" '
-        f'android:startY="{y0}" android:endX="0" android:endY="{y1}" android:startColor="{a}" '
-        f'android:endColor="{b}"/></aapt:attr>')
-    head = ('<?xml version="1.0" encoding="utf-8"?>\n<!-- generated by tools/icon/make_icon.py -->\n'
-            '<vector xmlns:android="http://schemas.android.com/apk/res/android" '
-            'xmlns:aapt="http://schemas.android.com/aapt"\n    android:width="108dp" android:height="108dp" '
-            'android:viewportWidth="108" android:viewportHeight="108">\n')
-    with open(os.path.join(RES, "ic_bg.xml"), "w") as f:
-        f.write(head + f'    <path android:pathData="M0,0h108v108h-108z">{gradient(BODY_TOP, BODY_BOTTOM, 0, 108)}</path>\n'
-                # soft shadow band under the bezel (moulded recess)
-                f'    <path android:fillColor="#14000000" android:pathData="{rrect(BZ[0] - 1, BZ[1] + 0.5, BZ[2] + 1, BZ[3] + 2.5, BZ[4] + 1)}"/>\n'
-                '</vector>\n')
-    l, t, r, b, rad = BZ
-    L = LCD
-    fg = [head,
-          f'    <path android:fillColor="{BEZEL_EDGE}" android:pathData="{rrect(l - 0.6, t - 0.6, r + 0.6, b + 0.6, rad + 0.6)}"/>\n',
-          f'    <path android:fillColor="{BEZEL}" android:pathData="{rrect(l, t, r, b, rad)}"/>\n',
-          f'    <path android:pathData="{rrect(*L)}">{gradient(LCD_TOP, LCD_BOTTOM, L[1], L[3])}</path>\n',
-          f'    <path android:fillColor="{GHOST}" android:pathData="{"".join(poly(p) for p in ghosts)}"/>\n',
-          f'    <path android:fillColor="{ON}" android:pathData="{"".join(poly(p) for p in lit)}{poly(tick())}"/>\n']
-    (al, at, s), (gl, gt, gs) = blocks
-    fg.append(f'    <path android:fillColor="{ON}" android:pathData="{poly(rect(al + s / 2, at + s / 2, s, s))}"/>\n')
-    fg.append(f'    <path android:fillColor="{CUT}" android:pathData="{"".join(poly(p) for p in plus(al, at, s))}"/>\n')
-    fg.append(f'    <path android:fillColor="{GHOST}" android:pathData="{poly(rect(gl + gs / 2, gt + gs / 2, gs, gs))}"/>\n')
-    fg.append('</vector>\n')
-    with open(os.path.join(RES, "ic_fg.xml"), "w") as f:
-        f.write("".join(fg))
-    # monochrome: bezel ring, lit digits + tick, cut-out "+" block (even-odd holes)
-    ring = rrect(l, t, r, b, rad) + rrect(*L)
-    block = poly(rect(al + s / 2, at + s / 2, s, s))
-    with open(os.path.join(RES, "ic_mono.xml"), "w") as f:
-        f.write(head +
-                f'    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="{ring}"/>\n'
-                f'    <path android:fillColor="#FFFFFFFF" android:pathData="{"".join(poly(p) for p in lit)}{poly(tick())}"/>\n'
-                f'    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="{block}{poly(cross(al, at, s))}"/>\n'
-                '</vector>\n')
+    for name, shapes in (("ic_bg.xml", bg), ("ic_fg.xml", fg), ("ic_mono.xml", mono)):
+        with open(os.path.join(RES, name), "w") as f:
+            f.write(vector_xml(shapes))
 
 
 def preview(path):
+    import io
+    import cairosvg
     from PIL import Image, ImageDraw
-    S = 8                      # supersampling
+    bg, fg, mono = layers()
+
+    def png(svgtext, size):
+        return Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svgtext.encode(), output_width=size, output_height=size))).convert("RGBA")
+
     N = 512
-    k = N * S / 108
-
-    def hexc(c):
-        c = c.lstrip("#")
-        a = int(c[0:2], 16) if len(c) == 8 else 255
-        c = c[-6:]
-        return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16), a)
-
-    def lerp(a, b, f):
-        return tuple(round(x + (y - x) * f) for x, y in zip(a, b))
-
-    def layer():
-        return Image.new("RGBA", (N * S, N * S), (0, 0, 0, 0))
-
-    img = Image.new("RGBA", (N * S, N * S))
-    top, bot = hexc(BODY_TOP), hexc(BODY_BOTTOM)
-    d = ImageDraw.Draw(img)
-    for y in range(0, N * S, S):
-        d.rectangle([0, y, N * S, y + S], fill=lerp(top, bot, y / (N * S)))
-
-    def comp(draw_fn):
-        nonlocal img
-        L_ = layer()
-        draw_fn(ImageDraw.Draw(L_))
-        img = Image.alpha_composite(img, L_)
-
-    sc = lambda pts: [(x * k, y * k) for x, y in pts]
-    rr = lambda dd, l, t, r, b, rad, col: dd.rounded_rectangle([l * k, t * k, r * k, b * k], rad * k, fill=col)
-    l, t, r, b, rad = BZ
-    comp(lambda dd: rr(dd, l - 1, t + 0.5, r + 1, b + 2.5, rad + 1, hexc("#14000000")))
-    comp(lambda dd: rr(dd, l - 0.6, t - 0.6, r + 0.6, b + 0.6, rad + 0.6, hexc(BEZEL_EDGE)))
-    comp(lambda dd: rr(dd, l, t, r, b, rad, hexc(BEZEL)))
-    # LCD gradient
-    L = LCD
-    mask = Image.new("L", img.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle([L[0] * k, L[1] * k, L[2] * k, L[3] * k], L[4] * k, fill=255)
-    grad = Image.new("RGBA", img.size)
-    gd = ImageDraw.Draw(grad)
-    for y in range(int(L[1] * k), int(L[3] * k) + 1, 2):
-        gd.rectangle([0, y, N * S, y + 2], fill=lerp(hexc(LCD_TOP), hexc(LCD_BOTTOM), (y / k - L[1]) / (L[3] - L[1])))
-    img.paste(grad, (0, 0), mask)
-    ghosts, lit, blocks = shapes()
-    comp(lambda dd: [dd.polygon(sc(p), fill=hexc(GHOST)) for p in ghosts])
-    comp(lambda dd: [dd.polygon(sc(p), fill=hexc(ON)) for p in lit + [tick()]])
-    (al, at, s), (gl, gt, gs) = blocks
-    comp(lambda dd: dd.polygon(sc(rect(al + s / 2, at + s / 2, s, s)), fill=hexc(ON)))
-    comp(lambda dd: [dd.polygon(sc(p), fill=hexc(CUT)) for p in plus(al, at, s)])
-    comp(lambda dd: dd.polygon(sc(rect(gl + gs / 2, gt + gs / 2, gs, gs)), fill=hexc(GHOST)))
-    full = img.resize((N, N), Image.LANCZOS)
-
-    # launcher look: adaptive icons show the centre 72/108, masked (circle and squircle)
-    vis = full.crop((round(N * 18 / 108), round(N * 18 / 108), round(N * 90 / 108), round(N * 90 / 108))).resize((N, N), Image.LANCZOS)
-
-    def masked(shape):
-        m = Image.new("L", (N * 4, N * 4), 0)
-        md = ImageDraw.Draw(m)
-        if shape == "circle":
-            md.ellipse([0, 0, N * 4, N * 4], fill=255)
-        else:                                   # superellipse n=4
-            pts = []
-            for i in range(720):
-                a = 2 * math.pi * i / 720
-                c, s_ = math.cos(a), math.sin(a)
-                x = abs(c) ** 0.5 * (1 if c >= 0 else -1)
-                y = abs(s_) ** 0.5 * (1 if s_ >= 0 else -1)
-                pts.append(((x + 1) * N * 2, (y + 1) * N * 2))
-            md.polygon(pts, fill=255)
-        m = m.resize((N, N), Image.LANCZOS)
-        out = Image.new("RGBA", (N, N), (0, 0, 0, 0))
-        out.paste(vis, (0, 0), m)
-        return out
-
-    sq, ci = masked("squircle"), masked("circle")
-    W = N * 3 + 80
-    sheet = Image.new("RGBA", (W, N + 260), (238, 238, 240, 255))
-    sheet.paste(full, (20, 20))
-    sheet.alpha_composite(sq, (N + 40, 20))
-    sheet.alpha_composite(ci, (2 * N + 60, 20))
-    # small sizes on a wallpaper-ish strip, as a launcher would show them
+    full = png(svg([bg, fg]), N)
+    # safe-zone guide on the full-bleed view
+    guide = full.copy()
+    g = ImageDraw.Draw(guide)
+    k = N / 108
+    g.ellipse([21 * k, 21 * k, 87 * k, 87 * k], outline=(255, 0, 160, 255), width=2)
+    g.rectangle([18 * k, 18 * k, 90 * k, 90 * k], outline=(0, 120, 255, 255), width=1)
+    circ, sq, rnd = (png(svg([bg, fg], clip=c), N) for c in ("circle", "squircle", "rounded"))
+    themed = png(svg([[("M0,0h108v108h-108z", "#FFD8E3F0", False)], ], clip="circle"), N)
+    themed.alpha_composite(png(svg([mono], clip="circle", mono="#1F3B5C"), N))
+    W = 4 * N + 100
+    sheet = Image.new("RGBA", (W, N + 300), (238, 238, 240, 255))
+    for i, im in enumerate((guide, circ, sq, themed)):
+        sheet.alpha_composite(im, (20 + i * (N + 20), 20))
     strip_y = N + 40
-    ImageDraw.Draw(sheet).rectangle([0, strip_y, W, N + 260], fill=(52, 70, 92, 255))
+    ImageDraw.Draw(sheet).rectangle([0, strip_y, W, N + 300], fill=(52, 70, 92, 255))
     x = 40
     for size in (192, 144, 96, 72, 48, 36):
-        sheet.alpha_composite(sq.resize((size, size), Image.LANCZOS), (x, strip_y + 20 + (192 - size) // 2))
-        x += size + 40
+        sheet.alpha_composite(circ.resize((size, size), Image.LANCZOS), (x, strip_y + 24 + (192 - size) // 2))
+        x += size + 30
+    for size in (96, 48):
+        sheet.alpha_composite(rnd.resize((size, size), Image.LANCZOS), (x, strip_y + 24 + (192 - size) // 2))
+        x += size + 30
     sheet.convert("RGB").save(path)
-    full.convert("RGB").save(os.path.splitext(path)[0] + "-512.png")
+    png(svg([bg, fg]), N).convert("RGB").save(os.path.splitext(path)[0] + "-512.png")
     print(path)
 
 
