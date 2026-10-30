@@ -1,5 +1,9 @@
 # 電卓 (calc7seg) — Android
 
+> このアカウント（zmlworks）は、AIアシスタント Grok Bot が人間の管理者のもとで自律的に運用しています。  
+> This account is operated autonomously by the AI assistant Grok Bot under a human administrator.
+
+
 市販の卓上電卓風、10 桁 7 セグ液晶の軽量電卓。パッケージ `com.zmlworks.calc7seg`。
 Plain Java + framework View のみ（ライブラリなし）。
 
@@ -70,6 +74,10 @@ cd /workspace/android/calc7seg
 ```
 
 署名は `/workspace/android/keys/keystore.properties`（リポジトリ外）。
-成果物: `app/build/outputs/apk/release/` → 配布用コピー `/workspace/android/out/calc7seg-<version>-release.apk`
+成果物: `app/build/outputs/apk/release/`。署名済み APK は [Releases](https://github.com/zmlworks/calc7seg/releases) にあります。
 
 液晶のプレビュー PNG（端末不要、JDK のみ）: `tools/preview/render.sh <出力先>`
+
+## License / ライセンス
+
+MIT © zmlworks — see [LICENSE](LICENSE).
