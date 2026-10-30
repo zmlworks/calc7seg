@@ -15,11 +15,11 @@ import android.widget.TextView;
 
 public final class MainActivity extends Activity {
     static final int BODY = 0xFF2B2D31;
-    private static final int NUM = 0xFF3B3E44, NUM_T = 0xFFF2F2EE;
-    private static final int OPR = 0xFF6A7079, OPR_T = 0xFFFFFFFF;
-    private static final int MEM = 0xFF4A4E55, MEM_T = 0xFFE4E6E9;
-    private static final int CLR = 0xFFD2572B, CLR_T = 0xFFFFFFFF;
-    private static final int EQL = 0xFF8E959E, EQL_T = 0xFFFFFFFF;
+    private static final int NUM = 0xFF26282D, NUM_T = 0xFFF2F2EE;
+    private static final int OPR = 0xFF4B5159, OPR_T = 0xFFFFFFFF;
+    private static final int MEM = 0xFF383C42, MEM_T = 0xFFE4E6E9;
+    private static final int CLR = 0xFFA8401C, CLR_T = 0xFFFFFFFF;
+    private static final int EQL = 0xFF666D76, EQL_T = 0xFFFFFFFF;
 
     private final Calculator calc = new Calculator();
     private LcdView lcd, memLcd;
