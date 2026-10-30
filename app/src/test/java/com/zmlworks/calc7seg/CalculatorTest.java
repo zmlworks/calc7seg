@@ -136,6 +136,59 @@ public class CalculatorTest {
         assertEquals("-0.5", run("[CA].5[NEG]"));
     }
 
+    @Test public void signBeforeNumberIsKept() {
+        assertEquals("-5.", run("[CA][NEG]5"));
+        assertEquals("-8.", run("[CA][NEG]5-3="));
+        assertEquals("2.", run("[CA]5+[NEG]3="));      // 5 + (-3), sign not dropped
+        assertEquals("-15.", run("[CA]5*[NEG]3="));
+        assertEquals("8.", run("[CA]5+[NEG][NEG]3="));  // toggled back
+        assertEquals("-0.5", run("[CA][NEG].5"));
+        assertEquals("3.", run("[CA]2+5=[NEG]3"));       // negated result, then a new number: positive
+        assertEquals("4.", run("[CA][NEG]+4="));        // armed sign cleared by another key
+    }
+
+    @Test public void restoreRoundTripAndArmedSign() {
+        c.keys("12+[NEG]");
+        Calculator d = new Calculator();
+        assertTrue(d.restore(c.save()));
+        d.keys("3=");
+        assertEquals("9.", d.display());
+    }
+
+    @Test public void restoreRejectsDamagedState() {
+        c.keys("7[M_PLUS]12+3");
+        String good = c.save();
+        String[] p = good.split("\u001f", -1);
+        String[][] bad = {
+                {"4", "120"},                 // unknown operator 'x'
+                {"10", "e12a"},               // non-digit in entry
+                {"10", "e12345678901"},       // 11 digits
+                {"10", "1.2"},                // missing 'e' prefix
+                {"0", "1e400"},               // out of range
+                {"1", "12345678901"},         // > 10 digits
+                {"9", "<script>"},            // error text
+                {"6", "yes"},                 // flag
+        };
+        for (String[] b : bad) {
+            String[] q = p.clone();
+            q[Integer.parseInt(b[0])] = b[1];
+            Calculator d = new Calculator();
+            d.keys("5[M_PLUS]");
+            assertFalse(b[0] + "=" + b[1], d.restore(String.join("\u001f", q)));
+            assertEquals("0.", d.display());
+            assertFalse(d.hasMemory());
+        }
+        Calculator d = new Calculator();
+        assertTrue(d.restore(good));
+        assertEquals("3.", d.display());
+        d.keys("=");
+        assertEquals("15.", d.display());
+        // older formats still load
+        assertTrue(new Calculator().restore(String.join("\u001f", java.util.Arrays.copyOf(p, 12))));
+        assertTrue(new Calculator().restore(String.join("\u001f", java.util.Arrays.copyOf(p, 13))));
+        assertTrue(new Calculator().restore(String.join("\u001f", java.util.Arrays.copyOf(p, 14))));
+    }
+
     @Test public void divisionByZero() {
         c.keys("5/0=");
         assertTrue(c.isError());

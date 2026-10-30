@@ -58,6 +58,10 @@ public final class Calculator {
     private String errorText = "0.";
     private final StringBuilder entry = new StringBuilder(); // keyed digits and optional '.', no sign
     private boolean entryNeg;
+    /** +/- was pressed before keying a number: the next entry starts negative. Cleared by any other key. */
+    private boolean negArm;
+    /** negArm as it was before the key being handled. */
+    private boolean armed;
 
     // ---------------------------------------------------------------- input
 
@@ -66,6 +70,8 @@ public final class Calculator {
             if (k == Key.CA || k == Key.CE) clearAll();
             return;
         }
+        armed = negArm;
+        negArm = false;
         try {
             switch (k) {
                 case D00: digits("00"); break;
@@ -123,7 +129,7 @@ public final class Calculator {
     private void startEntryIfNeeded() {
         if (!typing) {
             entry.setLength(0);
-            entryNeg = false;
+            entryNeg = armed;
             typing = true;
         }
     }
@@ -171,6 +177,9 @@ public final class Calculator {
             entryNeg = !entryNeg;
             syncEntry();
         } else {
+            // Before a number is keyed (0, or right after an operator key) the sign also applies to
+            // the number keyed next: "[+/-] 5" is -5 and "5 + [+/-] 3 =" is 2 (not 8).
+            if (armed || x.signum() == 0 || (op != 0 && !xNew)) negArm = !armed;
             x = x.negate();
             xNew = true;
         }
@@ -239,7 +248,7 @@ public final class Calculator {
         op = constOp = 0;
         typing = xNew = error = false;
         entry.setLength(0);
-        entryNeg = false;
+        entryNeg = negArm = false;
         errorText = "0.";
     }
 
@@ -327,33 +336,72 @@ public final class Calculator {
         return String.join("\u001f", acc.toPlainString(), x.toPlainString(), constVal.toPlainString(),
                 memory.toPlainString(), String.valueOf((int) op), String.valueOf((int) constOp),
                 bit(typing), bit(xNew), bit(error), errorText, "e" + entry, bit(entryNeg),
-                ans.toPlainString(), bit(memInUse));
+                ans.toPlainString(), bit(memInUse), bit(negArm));
     }
 
+    /**
+     * Restore a {@link #save()} string. Anything inconsistent (unknown operator, malformed entry,
+     * out-of-range numbers, overlong error text) is rejected as a whole and the calculator is reset,
+     * so a damaged preference can never leave it in a state the keys cannot produce.
+     */
     public boolean restore(String s) {
         if (s == null) return false;
         String[] p = s.split("\u001f", -1);
-        if (p.length < 12 || p.length > 14) return false; // 12 = v0.1.0 (no Ans), 13 = no in-use flag
+        if (p.length < 12 || p.length > 15) return false; // 12 = v0.1.0 (no Ans), 13 = no in-use flag, 14 = no +/- arm
         try {
-            BigDecimal a = new BigDecimal(p[0]), xx = new BigDecimal(p[1]), c = new BigDecimal(p[2]),
-                    m = new BigDecimal(p[3]);
-            acc = a; x = xx; constVal = c; memory = m;
-            op = (char) Integer.parseInt(p[4]);
-            constOp = (char) Integer.parseInt(p[5]);
-            typing = p[6].equals("1"); xNew = p[7].equals("1"); error = p[8].equals("1");
-            errorText = p[9];
+            BigDecimal a = value(p[0]), xx = value(p[1]), c = value(p[2]), m = value(p[3]);
+            BigDecimal an = p.length > 12 ? value(p[12]) : BigDecimal.ZERO;
+            char o = operator(p[4]), co = operator(p[5]);
+            boolean ty = flag(p[6]), xn = flag(p[7]), er = flag(p[8]), neg = flag(p[11]);
+            boolean inUse = p.length > 13 ? flag(p[13]) : m.signum() != 0;
+            boolean arm = p.length > 14 && flag(p[14]);
+            String et = p[9];
+            if (!et.matches("-?[0-9]{1,10}\\.[0-9]{0,9}") || et.replaceAll("[^0-9]", "").length() > DIGITS)
+                throw new IllegalArgumentException("errorText");
+            if (!p[10].startsWith("e")) throw new IllegalArgumentException("entry");
+            String en = p[10].substring(1);
+            if (!en.matches("[0-9]*(\\.[0-9]*)?") || en.replace(".", "").length() > DIGITS)
+                throw new IllegalArgumentException("entry");
+            if (ty && en.isEmpty()) throw new IllegalArgumentException("entry");
+            if (er && (o != 0 || co != 0 || ty)) throw new IllegalArgumentException("error state");
+            acc = a; x = xx; constVal = c; memory = m; ans = an;
+            op = o; constOp = co;
+            typing = ty; xNew = xn; error = er; errorText = et;
             entry.setLength(0);
-            entry.append(p[10].substring(1));
-            entryNeg = p[11].equals("1");
-            ans = p.length > 12 ? new BigDecimal(p[12]) : BigDecimal.ZERO;
-            memInUse = p.length > 13 ? p[13].equals("1") : m.signum() != 0;
+            entry.append(en);
+            entryNeg = neg;
+            memInUse = inUse;
+            negArm = arm && !typing && !error;
+            if (typing) syncEntry();   // x always matches the keyed digits
             return true;
         } catch (RuntimeException e) {
             clearAll();
             memory = ans = BigDecimal.ZERO;
             memInUse = false;
+            negArm = false;
             return false;
         }
+    }
+
+    /** A number a 10-digit display can hold (|v| < 10^10, at most 10 significant digits). */
+    private static BigDecimal value(String t) {
+        if (t.length() > 40) throw new IllegalArgumentException("number");
+        BigDecimal v = new BigDecimal(t);
+        BigDecimal r = cut(v);
+        if (r == null || r.compareTo(v) != 0) throw new IllegalArgumentException("number");
+        return r;
+    }
+
+    private static char operator(String t) {
+        int c = Integer.parseInt(t);
+        if (c != 0 && c != '+' && c != '-' && c != '×' && c != '÷') throw new IllegalArgumentException("op");
+        return (char) c;
+    }
+
+    private static boolean flag(String t) {
+        if (t.equals("1")) return true;
+        if (t.equals("0")) return false;
+        throw new IllegalArgumentException("flag");
     }
 
     private static String bit(boolean b) { return b ? "1" : "0"; }

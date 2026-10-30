@@ -43,7 +43,14 @@ final class KeyView extends View {
 
     private static Bitmap grain;
     /** Key bodies are shared by colour, size and state (labels are drawn live), so ~14 renders, not 56. */
-    private static final java.util.HashMap<String, Bitmap> CACHE = new java.util.HashMap<>();
+    /** LRU-bounded: every new key size (rotation, split screen, resizing) adds bodies; keep the recent ones only. */
+    private static final int CACHE_MAX = 48;
+    private static final java.util.LinkedHashMap<String, Bitmap> CACHE =
+            new java.util.LinkedHashMap<String, Bitmap>(64, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Bitmap> e) {
+                    return size() > CACHE_MAX; // not recycled: a view may still be drawing it; GC frees it
+                }
+            };
 
     KeyView(Context c, Calculator.Key key, String label, String description, int face, int text, float labelScale) {
         super(c);
