@@ -68,7 +68,16 @@ public final class MainActivity extends Activity {
         lcd = new LcdView(this, false);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, -2);
         blp.bottomMargin = Ui.dp(this, 14);
-        root.addView(bezel(lcd, 9, 10), blp);
+        LcdPanel panel = new LcdPanel(this).holding(lcd, 9, 10);
+        panel.setRaised(settings.raisedLcd(), false);
+        // tap the main display: flat ⇄ raised (propped up out of its recess); remembered
+        panel.setOnClickListener(v -> {
+            boolean up = !panel.raised();
+            panel.setRaised(up, true);
+            settings.setRaisedLcd(up);
+            if (settings.vibration()) v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+        });
+        root.addView(panel, blp);
 
         LinearLayout pad4 = new LinearLayout(this);
         pad4.setOrientation(LinearLayout.VERTICAL);

@@ -304,15 +304,74 @@ public class CalculatorTest {
             Lcd.Metrics m = new Lcd.Metrics(w);
             float hb = m.annS * 0.58f;                              // inverted block half-size
             float cy = m.annTop + m.annS / 2;
-            assertTrue(cy + hb < m.d.top);                          // above the digits
+            assertTrue(cy + hb < m.d.tickTop());                    // above the digits and their ticks
             assertTrue(m.annTop + m.annS / 2 - hb > 0);
             float c0 = m.annLeft + m.annS / 2;
             for (int i = 0; i < 3; i++)                             // blocks don't touch each other
                 assertTrue(c0 + i * m.annPitch + hb < c0 + (i + 1) * m.annPitch - hb);
-            float lastRight = c0 + 3 * m.annPitch + hb;
-            assertTrue(lastRight + m.eSize * 0.8f < m.eX - m.eSize * 0.4f); // clear gap before E
-            assertTrue(m.eX + m.eSize < w);
+            float mid = (c0 - hb + c0 + 3 * m.annPitch + hb) / 2;
+            assertTrue(mid > w * 0.5f && mid < w * 0.65f);          // centre, slightly right
+            // E: far left, tall (just under the digit height), clear of the sign cell / ghost digits
+            assertTrue(m.eH < m.d.cellH && m.eH > m.d.cellH * 0.8f);
+            assertTrue(m.eH > m.eW * 2f);                           // narrow, upright
+            assertTrue(m.eL >= 0 && m.eL < c0 - hb);
+            assertTrue(m.eRight() + m.d.cellW * 0.15f < m.d.cellLeft(-1));
+            assertTrue(m.eT + m.eH < m.d.top + m.d.cellH);
+            // rightmost digit stays inside the glass
+            assertTrue(m.d.cellLeft(Lcd.CELLS - 1) + m.d.cellW + m.d.cellH * m.d.slant < w);
         }
+    }
+
+    @Test public void floatingMinusSitsLeftOfMostSignificantDigit() {
+        assertEquals(4, Lcd.layout("-1234.5").signCell);            // 5 digits in cells 5..9, minus in 4
+        assertEquals(8, Lcd.layout("-5.").signCell);
+        assertEquals(7, Lcd.layout("-0.5").signCell);               // leading 0 is a digit
+        assertEquals(-2, Lcd.layout("12.5").signCell);              // positive: no minus anywhere
+        assertEquals(-1, Lcd.layout("-1234567890.").signCell);      // 10 digits: spare sign cell
+        assertEquals(-1, Lcd.layout("-0.123456789").signCell);
+        assertEquals(Lcd.MINUS, 1 << 6);                             // middle bar (segment g)
+        // negatives keep the full 10-digit range (sign cell is extra, not a digit)
+        Calculator c = new Calculator();
+        c.keys("9999999999[NEG]");
+        assertEquals("-9999999999.", c.display());
+        assertEquals(-1, Lcd.layout(c.display()).signCell);
+        c.keys("-1=");
+        assertTrue(c.isError());                                     // -10^10 overflows like +10^10
+        Calculator d = new Calculator();
+        d.keys("1-1235.5=");
+        assertEquals("-1234.5", d.display());
+        assertEquals("-1'234.5", Lcd.grouped(d.display()));
+        assertEquals(4, Lcd.layout(d.display()).signCell);
+    }
+
+    @Test public void floatingMinusIsDrawnAsSegmentG() {
+        // record the lit polygons and check the minus cell lights exactly one segment
+        Lcd.Metrics m = new Lcd.Metrics(1000);
+        final java.util.List<float[]> lit = new java.util.ArrayList<>();
+        Lcd.Painter rec = new Lcd.Painter() {
+            @Override public void poly(float[] xy, int color) { if (color == Lcd.ON) lit.add(xy); }
+            @Override public void circle(float cx, float cy, float r, int color) {}
+            @Override public void roundRect(float l, float t, float r, float b, float rad, int color) {}
+            @Override public void text(String s, float cx, float baseline, float size, int color) {}
+        };
+        Lcd.State st = new Lcd.State();
+        st.main = "-5.";
+        Lcd.render(rec, m, st);
+        float l = m.d.cellLeft(8), r = l + m.d.cellW + m.d.cellH * m.d.slant;
+        int inCell = 0;
+        for (float[] p : lit) if (p[0] >= l && p[0] <= r) inCell++;
+        assertEquals(1, inCell);
+        st.main = "5.";
+        lit.clear();
+        Lcd.render(rec, m, st);
+        for (float[] p : lit) assertFalse(p[0] >= l && p[0] <= r);
+        // E lights 5 segments only in the error state
+        st.error = true;
+        lit.clear();
+        Lcd.render(rec, m, st);
+        int eSegs = 0;
+        for (float[] p : lit) if (p[0] < m.eRight()) eSegs++;
+        assertEquals(5, eSegs);
     }
 
     @Test public void cutOutColourMatchesLcdGradient() {
@@ -407,6 +466,13 @@ public class CalculatorTest {
         again.setSound(true);
         assertTrue(new Settings(store).sound());
         assertFalse(new Settings(store).vibration());
+        // main display look: flat by default, raised choice persists, independent of the others
+        assertFalse(new Settings(store).raisedLcd());
+        new Settings(store).setRaisedLcd(true);
+        assertTrue(new Settings(store).raisedLcd());
+        assertTrue(new Settings(store).sound());
+        new Settings(store).setRaisedLcd(false);
+        assertFalse(new Settings(store).raisedLcd());
     }
 
     @Test public void saveRestore() {

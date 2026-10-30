@@ -21,6 +21,12 @@ final class Lcd {
         /** sep[i]: thousands tick in the gap to the right of cell i (top of the gap). */
         final boolean[] sep = new boolean[CELLS];
         boolean neg;
+        /**
+         * Floating minus (main LCD): the cell whose middle bar (segment g) shows the minus sign — the
+         * cell immediately left of the most significant digit. -1 = the spare sign cell left of cell 0,
+         * used only when a negative number fills all 10 digits.
+         */
+        int signCell = -2;
     }
 
     static Frame layout(String text) {
@@ -39,6 +45,11 @@ final class Lcd {
             }
         }
         markGroups(f);
+        if (f.neg) {
+            int first = 0;
+            while (first < CELLS - 1 && f.seg[first] == 0) first++;
+            f.signCell = first - 1;
+        }
         return f;
     }
 
@@ -144,15 +155,22 @@ final class Lcd {
     /** Digit block geometry. */
     static final class Digits {
         final float cellW, cellH, pitch, th, gap, signW, dpR, left, top, slant = 0.07f;
+        /** Main LCD: minus floats next to the number; the sign slot is a full 7-segment cell. */
+        final boolean floatSign;
 
         Digits(float right, float top, float cellW, float aspect, float thick) {
+            this(right, top, cellW, aspect, thick, false);
+        }
+
+        Digits(float right, float top, float cellW, float aspect, float thick, boolean floatSign) {
+            this.floatSign = floatSign;
             this.cellW = cellW;
             this.top = top;
             pitch = cellW * 1.32f;
             cellH = cellW * aspect;
             th = cellW * thick;
             gap = th * 0.11f;
-            signW = cellW * 0.9f;
+            signW = floatSign ? pitch : cellW * 0.9f;
             dpR = th * 0.55f;
             left = right - (signW + CELLS * pitch) + (pitch - cellW) * 0.1f;
         }
@@ -164,34 +182,53 @@ final class Lcd {
         float tickTop() { return top - cellH * 0.07f; }
 
         static float unitsWide() { return 0.9f + CELLS * 1.32f; }
+
+        /** Left x of digit cell i (-1 = sign slot; with floatSign it is an ordinary cell). */
+        float cellLeft(int i) {
+            return floatSign ? left + (i + 1) * pitch : left + signW + i * pitch;
+        }
     }
 
     /**
      * Main LCD, derived from the width only:
-     * top row  = [+][−][×][÷] fixed operator annunciators ........ E
-     * main row = [-] 10 large digits.
+     * <pre>
+     *  [E]          [+][−][×][÷]          (annunciators: centre, slightly right)
+     *  [E] [8] 8 8 8 8 8 8 8 8 8 8        ([8] = sign cell: only its middle bar is ever lit)
+     * </pre>
+     * E is a narrow, tall segment letter in its own column at the far left (top aligned with the
+     * annunciators, a little shorter than the digits), so it never touches a digit or ghost.
      */
     static final class Metrics {
         final float width, height, pad;
         final Digits d;
-        final float annTop, annS, annPitch, annLeft, eX, eSize, eBase;
+        final float annTop, annS, annPitch, annLeft;
+        /** E letter cell: left, top, width, height, stroke thickness. */
+        final float eL, eT, eW, eH, eTh;
+
+        static final float E_UNITS = 0.9f, E_GAP = 0.3f;
 
         Metrics(float width) {
             this.width = width;
             pad = width * 0.035f;
             float iw = width - 2 * pad;
-            float cellW = iw / Digits.unitsWide();
+            float cellW = iw / (E_UNITS + E_GAP + (CELLS + 1) * 1.32f);
             annS = cellW * 0.62f;                       // annunciator square
             annTop = pad * 0.85f;
             annPitch = annS * 1.45f;
-            annLeft = pad * 1.3f;
             float top = annTop + annS + annS * 0.45f;
-            d = new Digits(width - pad, top, cellW, 2.15f, 0.27f);
+            d = new Digits(width - pad, top, cellW, 2.15f, 0.27f, true);
             height = top + d.cellH + pad;
-            eSize = annS * 1.05f;
-            eX = annLeft + 4 * annPitch + eSize * 1.9f;   // clear gap after the ÷ block
-            eBase = annTop + annS / 2 + eSize * 0.36f;
+            float blockW = 3 * annPitch + annS;
+            annLeft = width * 0.585f - blockW / 2;      // operator row: centre, slightly right
+            eL = pad;
+            eT = annTop + annS * 0.05f;
+            eH = d.cellH * 0.9f;                        // just short of the digit height
+            eW = cellW * E_UNITS;
+            eTh = d.th * 0.7f;
         }
+
+        /** Rightmost x the slanted E reaches (its top-right corner). */
+        float eRight() { return eL + eW + eH * d.slant; }
     }
 
     /** Small memory panel: 10 digits only. */
@@ -218,7 +255,12 @@ final class Lcd {
             int bg = bgAt(cy / m.height);
             for (float[] poly : opSymbol(OPS.charAt(i), cx, cy, m.annS * 0.8f)) p.poly(poly, bg);
         }
-        p.text("E", m.eX, m.eBase, m.eSize, s.error ? ON : GHOST);
+        int ec = s.error ? ON : GHOST;
+        for (int sg : new int[]{0, 3, 4, 5, 6}) {            // E = a, d, e, f, g; middle bar a bit short
+            float[] pt = segment(sg, m.eL, m.eT, m.eW, m.eH, m.eTh, m.eTh * 0.11f, m.d.slant);
+            if (sg == 6) { float cut = (pt[6] - pt[0]) * 0.1f; pt[6] -= cut; pt[4] -= cut; pt[8] -= cut; }
+            p.poly(pt, ec);
+        }
         digits(p, layout(s.main), m.d);
     }
 
@@ -238,13 +280,23 @@ final class Lcd {
     }
 
     private static void digits(Painter p, Frame f, Digits d) {
-        p.poly(segment(6, d.left - d.cellW * 0.1f, d.top, d.signW, d.cellH, d.th, d.gap, d.slant), f.neg ? ON : GHOST);
-        for (int i = 0; i < CELLS; i++) {
-            float l = d.left + d.signW + i * d.pitch;
+        if (d.floatSign) {                                     // spare sign cell: full ghost 8, lit g only
+            float l = d.cellLeft(-1);
             for (int sg = 0; sg < 7; sg++) {
                 float[] pt = segment(sg, l, d.top, d.cellW, d.cellH, d.th, d.gap, d.slant);
                 p.poly(pt, GHOST);
-                if ((f.seg[i] & (1 << sg)) != 0) p.poly(pt, ON);
+                if (sg == 6 && f.signCell == -1) p.poly(pt, ON);
+            }
+        } else {
+            p.poly(segment(6, d.left - d.cellW * 0.1f, d.top, d.signW, d.cellH, d.th, d.gap, d.slant), f.neg ? ON : GHOST);
+        }
+        for (int i = 0; i < CELLS; i++) {
+            float l = d.cellLeft(i);
+            int mask = f.seg[i] | (d.floatSign && f.signCell == i ? MINUS : 0);
+            for (int sg = 0; sg < 7; sg++) {
+                float[] pt = segment(sg, l, d.top, d.cellW, d.cellH, d.th, d.gap, d.slant);
+                p.poly(pt, GHOST);
+                if ((mask & (1 << sg)) != 0) p.poly(pt, ON);
             }
             float gx = l + d.cellW + (d.pitch - d.cellW) * 0.45f;   // gap centre at the baseline
             p.circle(gx - (d.dotY() - d.top - d.cellH) * d.slant, d.dotY(), d.dpR, f.dp[i] ? ON : GHOST);
