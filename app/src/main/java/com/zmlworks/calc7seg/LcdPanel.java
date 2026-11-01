@@ -30,10 +30,10 @@ public final class LcdPanel extends FrameLayout {
     /** Apparent height of the raised panel (cos of the lift angle). */
     static final float LIFT_SCALE = 0.98f;
     /**
-     * Raised panel: the LCD is made this much taller than when flat, so the propped-up,
-     * foreshortened digits read taller instead of squashed (0.9.4).
+     * Raised panel grows upward only (0.9.4): its bottom edge and everything below stay put; the
+     * top edge rises into the gap above, stopping this far short of the view above (the memory LCD strip).
      */
-    static final float RAISED_HEIGHT = 1.25f;
+    static final float TOP_GAP_DP = 3f;
     private static final long ANIM_MS = 180;
     private static final int SHADOW_STEPS = 8;
 
@@ -75,23 +75,57 @@ public final class LcdPanel extends FrameLayout {
 
     boolean raised() { return raised; }
 
-    /** Switch look; animate the height change only when asked (user tap), not on restore. */
+    /** 0 = flat, 1 = fully raised (animated). */
+    private float t;
+    /** Current upward extension in px (= t × available gap). */
+    private int ext;
+
+    /** Switch look; animate only when asked (user tap), not on restore. */
     void setRaised(boolean up, boolean animate) {
         raised = up;
-        float to = up ? RAISED_HEIGHT : 1f;
+        float to = up ? 1f : 0f;
         if (anim != null) anim.cancel();
-        if (lcd != null) {
-            if (animate && isLaidOut()) {
-                float from = lcd.stretch();
-                anim = android.animation.ValueAnimator.ofFloat(from, to).setDuration(ANIM_MS);
-                anim.addUpdateListener(a -> lcd.setStretch((float) a.getAnimatedValue()));
-                anim.start();
-            } else lcd.setStretch(to);
-        }
+        if (animate && isLaidOut()) {
+            anim = android.animation.ValueAnimator.ofFloat(t, to).setDuration(ANIM_MS);
+            anim.addUpdateListener(a -> apply((float) a.getAnimatedValue()));
+            anim.start();
+        } else apply(to);
         invalidate();
     }
 
     void setRaised(boolean up) { setRaised(up, false); }
+
+    /** Room above the panel's flat position, minus a small gap to the view above; 0 if unknown. */
+    private int room() {
+        if (!(getParent() instanceof android.view.ViewGroup) || !isLaidOut()) return 0;
+        android.view.ViewGroup p = (android.view.ViewGroup) getParent();
+        int i = p.indexOfChild(this);
+        int above = i > 0 ? p.getChildAt(i - 1).getBottom() : p.getPaddingTop();
+        int flatTop = getTop() + ext;
+        return Math.max(0, flatTop - above - Math.round(TOP_GAP_DP * dp));
+    }
+
+    /** Extend the top edge upward by t × room: taller by e, top margin −e, so siblings don't move. */
+    private void apply(float k) {
+        t = k;
+        int e = Math.round(k * room());
+        if (lcd != null && lcd.getWidth() > 0) {
+            float base = lcd.baseHeight();
+            lcd.setStretch(base > 0 ? (base + e) / base : 1f);
+        }
+        if (e != ext && getLayoutParams() instanceof MarginLayoutParams) {
+            ext = e;
+            MarginLayoutParams lp = (MarginLayoutParams) getLayoutParams();
+            lp.topMargin = -e;
+            setLayoutParams(lp);
+        }
+    }
+
+    @Override protected void onLayout(boolean changed, int l, int tp, int r, int b) {
+        super.onLayout(changed, l, tp, r, b);
+        // restored raised state (or size change): the gap is only known after the first layout
+        if (t > 0 && (anim == null || !anim.isRunning()) && Math.round(t * room()) != ext) post(() -> apply(t));
+    }
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
         super.onSizeChanged(w, h, ow, oh);

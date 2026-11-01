@@ -43,6 +43,12 @@ public final class LcdView extends View implements Lcd.Painter {
     /** Stretch the display vertically (taller view, digits drawn taller); 1 = normal. */
     float stretch() { return stretch; }
 
+    /** Unstretched content height for the current width. */
+    float baseHeight() {
+        int w = getWidth();
+        return memoryPanel ? new Lcd.MemMetrics(w).height : new Lcd.Metrics(w).height;
+    }
+
     void setStretch(float k) {
         if (k == stretch) return;
         stretch = k;
