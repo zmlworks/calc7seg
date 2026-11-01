@@ -72,10 +72,10 @@ public final class MainActivity extends Activity {
         blp.bottomMargin = Ui.dp(this, 14);
         LcdPanel panel = new LcdPanel(this).holding(lcd, 9, 10);
         panel.setRaised(settings.raisedLcd());
-        // tap the main display: flat ⇄ raised (propped up out of its recess, top edge grows up toward the memory LCD, bottom and keys fixed, short animation); remembered
+        // tap the main display: flat ⇄ raised (propped up out of its recess, top edge grows up toward the memory LCD, bottom and keys fixed, instant); remembered
         panel.setOnClickListener(v -> {
             boolean up = !panel.raised();
-            panel.setRaised(up, true);
+            panel.setRaised(up);
             settings.setRaisedLcd(up);
             if (settings.vibration()) v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
         });

@@ -176,7 +176,7 @@ final class Lcd {
         }
 
         /** Decimal point centre: sits a little below the digit baseline, like a real LCD. */
-        float dotY() { return top + cellH - dpR * 0.35f; }
+        float dotY() { return top + cellH + dpR * 0.15f; }   // 0.9.4: half a radius lower (was −0.35)
 
         /** Thousands tick top: raised a little above the digit tops. */
         float tickTop() { return top - cellH * 0.07f; }
@@ -212,10 +212,12 @@ final class Lcd {
             float iw = width - 2 * pad;
             float cellW = iw / Digits.unitsWide();     // same digit size as 0.8.0
             annS = cellW * 0.62f;                       // annunciator square
-            annTop = pad * 0.85f;
+            annTop = pad * 0.45f;                       // 0.9.4: operator row higher (was 0.85)
             annPitch = annS * 1.45f;
-            float top = annTop + annS + annS * 0.45f;
-            d = new Digits(width - pad, top, cellW, 2.15f, 0.27f, true);
+            // 0.9.4: digits 6% taller (aspect 2.15 → 2.28), growing upward so the baseline and the
+            // panel height stay as before
+            float top = pad * 0.85f + annS + annS * 0.45f - cellW * (DIGIT_ASPECT - 2.15f);
+            d = new Digits(width - pad, top, cellW, DIGIT_ASPECT, 0.27f, true);
             height = top + d.cellH + pad;
             float blockW = 3 * annPitch + annS;
             annLeft = width * 0.585f - blockW / 2;      // operator row: centre, slightly right
@@ -229,6 +231,7 @@ final class Lcd {
         float eHalfH() { return blockHalf() * E_TALL; }
 
         static final float E_TALL = 1.5f;
+        static final float DIGIT_ASPECT = 2.28f;
 
         /** Half side of a cut-out block. */
         float blockHalf() { return annS * 0.58f; }

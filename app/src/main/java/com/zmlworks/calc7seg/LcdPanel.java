@@ -18,8 +18,8 @@ import android.widget.FrameLayout;
  *   <li>flat (0.8.0): the panel sits flush in the body;</li>
  *   <li>raised ("L"): the panel is propped up out of its recess. It is drawn sheared into a
  *       parallelogram (full-width bottom edge hinged at the bottom of the recess, top edge shifted
- *       right) and slightly foreshortened; the empty recess shows as a shallow sunken strip on the
- *       left and along the top, with a faint shadow.</li>
+ *       right) and slightly foreshortened; the empty recess (exactly the flat display's footprint;
+ *       the upward extension above it is plain body) shows as a sunken wedge on the left, with a faint shadow.</li>
  * </ul>
  * Everything is vector drawing with a canvas matrix; no bitmaps. The top-right corner overhangs
  * the panel's own bounds by the shear amount, so the parent must not clip children.
@@ -34,20 +34,18 @@ public final class LcdPanel extends FrameLayout {
      * top edge rises into the gap above, stopping this far short of the view above (the memory LCD strip).
      */
     static final float TOP_GAP_DP = 3f;
-    private static final long ANIM_MS = 180;
     private static final int SHADOW_STEPS = 8;
 
     private final float dp;
     private float radius;
     private final Paint recessFill = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint(Paint.ANTI_ALIAS_FLAG),
             line = new Paint(Paint.ANTI_ALIAS_FLAG), shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Path outline = new Path(), mapped = new Path();
+    private final Path outline = new Path(), mapped = new Path(), recess = new Path();
     private final RectF r = new RectF();
     private final Matrix matrix = new Matrix();
     private Shader topShade, leftShade, hingeShade;
     private boolean raised;
     private LcdView lcd;
-    private android.animation.ValueAnimator anim;
 
     public LcdPanel(Context c) {
         super(c);
@@ -75,25 +73,17 @@ public final class LcdPanel extends FrameLayout {
 
     boolean raised() { return raised; }
 
-    /** 0 = flat, 1 = fully raised (animated). */
+    /** 0 = flat, 1 = raised. */
     private float t;
     /** Current upward extension in px (= t × available gap). */
     private int ext;
 
-    /** Switch look; animate only when asked (user tap), not on restore. */
-    void setRaised(boolean up, boolean animate) {
+    /** Switch look instantly (0.9.4: no animation). */
+    void setRaised(boolean up) {
         raised = up;
-        float to = up ? 1f : 0f;
-        if (anim != null) anim.cancel();
-        if (animate && isLaidOut()) {
-            anim = android.animation.ValueAnimator.ofFloat(t, to).setDuration(ANIM_MS);
-            anim.addUpdateListener(a -> apply((float) a.getAnimatedValue()));
-            anim.start();
-        } else apply(to);
+        apply(up ? 1f : 0f);
         invalidate();
     }
-
-    void setRaised(boolean up) { setRaised(up, false); }
 
     /** Room above the panel's flat position, minus a small gap to the view above; 0 if unknown. */
     private int room() {
@@ -124,7 +114,7 @@ public final class LcdPanel extends FrameLayout {
     @Override protected void onLayout(boolean changed, int l, int tp, int r, int b) {
         super.onLayout(changed, l, tp, r, b);
         // restored raised state (or size change): the gap is only known after the first layout
-        if (t > 0 && (anim == null || !anim.isRunning()) && Math.round(t * room()) != ext) post(() -> apply(t));
+        if (t > 0 && Math.round(t * room()) != ext) post(() -> apply(t));
     }
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
@@ -132,6 +122,7 @@ public final class LcdPanel extends FrameLayout {
         outline.rewind();
         r.set(0, 0, w, h);
         outline.addRoundRect(r, radius, radius, Path.Direction.CW);
+        recessOutline();
         // shallow recess floor: only a little darker than the body, a touch deeper toward the top
         recessFill.setShader(new LinearGradient(0, 0, 0, h, new int[]{0xFF9D9B97, 0xFFABA9A5, 0xFFB3B1AC},
                 new float[]{0, 0.4f, 1}, Shader.TileMode.CLAMP));
@@ -140,6 +131,16 @@ public final class LcdPanel extends FrameLayout {
         hingeShade = new LinearGradient(0, h - 4 * dp, 0, h, 0x00000000, 0x30000000, Shader.TileMode.CLAMP);
         panelMatrix(w, h);
         outline.transform(matrix, mapped);
+    }
+
+    /**
+     * 0.9.4: the recess is exactly where the flat display sits (the hole it was lifted out of): the
+     * bottom h−ext px of this view. The band above it (the upward extension) is plain body.
+     */
+    private void recessOutline() {
+        recess.rewind();
+        r.set(0, ext, getWidth(), getHeight());
+        recess.addRoundRect(r, radius, radius, Path.Direction.CW);
     }
 
     /** Raised panel transform: x' = x + s·(h−y)/h (bottom fixed, full width), y foreshortened to the bottom. */
@@ -152,14 +153,21 @@ public final class LcdPanel extends FrameLayout {
         if (!raised) { super.draw(c); return; }
         float w = getWidth(), h = getHeight();
 
-        // 1. the recess left behind in the body
+        // 1. the recess left behind in the body = the flat display's footprint
+        float rt = ext;
+        recessOutline();
         c.save();
-        c.clipPath(outline);
-        c.drawPath(outline, recessFill);
+        c.clipPath(recess);
+        c.translate(0, rt);
+        float rh = h - rt;
+        recessFill.setShader(new LinearGradient(0, 0, 0, rh, new int[]{0xFF9D9B97, 0xFFABA9A5, 0xFFB3B1AC},
+                new float[]{0, 0.4f, 1}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, rh, recessFill);
         shade.setShader(topShade);
         c.drawRect(0, 0, w, 10 * dp, shade);
         shade.setShader(leftShade);
-        c.drawRect(0, 0, 6 * dp, h, shade);
+        c.drawRect(0, 0, 6 * dp, rh, shade);
+        c.translate(0, -rt);
         // 2. faint shadow of the raised panel in the recess (soft edge from nested strokes)
         c.save();
         c.translate(2 * dp, -dp);
@@ -172,10 +180,10 @@ public final class LcdPanel extends FrameLayout {
         shade.setShader(hingeShade);
         c.drawRect(0, h - 4 * dp, w, h, shade);
         c.restore();
-        // recess rim moulded into the body
+        // recess rim moulded into the body (the flat display's outline)
         line.setStrokeWidth(dp);
         line.setColor(0xFF84827F);
-        r.set(dp / 2, dp / 2, w - dp / 2, h - dp / 2);
+        r.set(dp / 2, rt + dp / 2, w - dp / 2, h - dp / 2);
         c.drawRoundRect(r, radius, radius, line);
 
         // 3. thin dark edge on the panel's left slanted side (its thickness, seen at an angle)
