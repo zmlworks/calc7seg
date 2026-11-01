@@ -21,6 +21,8 @@ public final class LcdView extends View implements Lcd.Painter {
     private Lcd.MemMetrics mm;
     private Lcd.State state = new Lcd.State();
     private Canvas canvas;
+    /** Vertical stretch of the content (1 = normal); the raised panel sets it &gt; 1. */
+    private float stretch = 1f;
 
     public LcdView(Context c, boolean memoryPanel) {
         super(c);
@@ -38,9 +40,19 @@ public final class LcdView extends View implements Lcd.Painter {
         invalidate();
     }
 
+    /** Stretch the display vertically (taller view, digits drawn taller); 1 = normal. */
+    float stretch() { return stretch; }
+
+    void setStretch(float k) {
+        if (k == stretch) return;
+        stretch = k;
+        requestLayout();
+        invalidate();
+    }
+
     @Override protected void onMeasure(int ws, int hs) {
         int w = MeasureSpec.getSize(ws);
-        int h = Math.round(memoryPanel ? new Lcd.MemMetrics(w).height : new Lcd.Metrics(w).height);
+        int h = Math.round((memoryPanel ? new Lcd.MemMetrics(w).height : new Lcd.Metrics(w).height) * stretch);
         if (MeasureSpec.getMode(hs) == MeasureSpec.AT_MOST) h = Math.min(h, MeasureSpec.getSize(hs));
         else if (MeasureSpec.getMode(hs) == MeasureSpec.EXACTLY) h = MeasureSpec.getSize(hs);
         setMeasuredDimension(w, h);
@@ -58,8 +70,11 @@ public final class LcdView extends View implements Lcd.Painter {
         rect.set(0, 0, getWidth(), getHeight());
         c.drawRoundRect(rect, r, r, bg);
         canvas = c;
+        c.save();
+        c.scale(1f, stretch);
         if (memoryPanel) Lcd.renderMemory(this, mm, state.mem);
         else Lcd.render(this, m, state);
+        c.restore();
         canvas = null;
     }
 
