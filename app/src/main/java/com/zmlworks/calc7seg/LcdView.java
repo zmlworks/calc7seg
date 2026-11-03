@@ -23,6 +23,8 @@ public final class LcdView extends View implements Lcd.Painter {
     private Canvas canvas;
     /** Vertical stretch of the content (1 = normal); the raised panel sets it &gt; 1. */
     private float stretch = 1f;
+    /** Horizontal content offset in px (0.9.5: raised panel shifts the readout left); 0 = none. */
+    private float shiftX = 0f;
 
     public LcdView(Context c, boolean memoryPanel) {
         super(c);
@@ -47,6 +49,12 @@ public final class LcdView extends View implements Lcd.Painter {
     float baseHeight() {
         int w = getWidth();
         return memoryPanel ? new Lcd.MemMetrics(w).height : new Lcd.Metrics(w).height;
+    }
+
+    void setShiftX(float x) {
+        if (x == shiftX) return;
+        shiftX = x;
+        invalidate();
     }
 
     void setStretch(float k) {
@@ -77,6 +85,7 @@ public final class LcdView extends View implements Lcd.Painter {
         c.drawRoundRect(rect, r, r, bg);
         canvas = c;
         c.save();
+        c.translate(shiftX, 0);
         c.scale(1f, stretch);
         if (memoryPanel) Lcd.renderMemory(this, mm, state.mem);
         else Lcd.render(this, m, state);

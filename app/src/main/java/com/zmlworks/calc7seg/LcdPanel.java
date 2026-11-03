@@ -25,15 +25,22 @@ import android.widget.FrameLayout;
  * the panel's own bounds by the shear amount, so the parent must not clip children.
  */
 public final class LcdPanel extends FrameLayout {
-    /** Top-edge shift as a fraction of the panel width (≈23 px on a 1080 px screen, ≈4°). */
-    static final float SHEAR = 0.0225f;
+    /** Top-edge shift as a fraction of the panel width (0.9.5: ≈46 px on a 1080 px screen; was 0.0225). */
+    static final float SHEAR = 0.045f;
     /** Apparent height of the raised panel (cos of the lift angle). */
-    static final float LIFT_SCALE = 0.98f;
+    static final float LIFT_SCALE = 0.96f;
     /**
      * Raised panel grows upward only (0.9.4): its bottom edge and everything below stay put; the
      * top edge rises into the gap above, stopping this far short of the view above (the memory LCD strip).
+     * 0.9.5: negative = the raised panel's frame overlaps the memory LCD strip (drawn in front of it,
+     * covering the bottom of its bezel and the printed MEMORY label).
      */
-    static final float TOP_GAP_DP = 3f;
+    static final float TOP_GAP_DP = -13f;
+    /**
+     * 0.9.5: the LCD content (digits, annunciators) is shifted left by this × half the top-edge shift,
+     * so the readout looks centred in the sheared glass instead of leaning right.
+     */
+    static final float CONTENT_SHIFT = 1.15f;
     private static final int SHADOW_STEPS = 8;
 
     private final float dp;
@@ -150,8 +157,9 @@ public final class LcdPanel extends FrameLayout {
     }
 
     @Override public void draw(Canvas c) {
-        if (!raised) { super.draw(c); return; }
         float w = getWidth(), h = getHeight();
+        if (lcd != null) lcd.setShiftX(raised ? -CONTENT_SHIFT * SHEAR * w / 2f : 0f);
+        if (!raised) { super.draw(c); return; }
 
         // 1. the recess left behind in the body = the flat display's footprint
         float rt = ext;
