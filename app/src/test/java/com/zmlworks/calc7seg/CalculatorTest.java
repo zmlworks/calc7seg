@@ -627,4 +627,10 @@ public class CalculatorTest {
         assertArrayEquals(new int[]{Lcd.DIGIT[1], Lcd.DIGIT[2], Lcd.DIGIT[3], Lcd.DIGIT[4], Lcd.DIGIT[5],
                 Lcd.DIGIT[6], Lcd.DIGIT[7], Lcd.DIGIT[8], Lcd.DIGIT[9], Lcd.DIGIT[0]}, full.seg);
     }
+
+    @Test public void memoryMinusFloatsNextToNumber() {
+        assertTrue(new Lcd.MemMetrics(500).d.floatSign);
+        Lcd.Frame f = Lcd.layout("-5.");
+        assertEquals(Lcd.CELLS - 2, f.signCell);   // the cell just left of the leading digit
+    }
 }

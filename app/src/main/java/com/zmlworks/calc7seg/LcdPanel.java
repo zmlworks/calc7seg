@@ -37,10 +37,11 @@ public final class LcdPanel extends FrameLayout {
      */
     static final float TOP_GAP_DP = -13f;
     /**
-     * 0.9.5: the LCD content (digits, annunciators) is shifted left by this × half the top-edge shift,
-     * so the readout looks centred in the sheared glass instead of leaning right.
+     * 0.9.6: when raised, the whole module (recess, shadow, frame, glass and contents together) is
+     * drawn shifted left by this × the top-edge shift, so the slanted panel sits centred on the screen
+     * (bottom-left and top-right corners equally far from the edges). Replaces 0.9.5's content-only shift.
      */
-    static final float CONTENT_SHIFT = 1.15f;
+    static final float PANEL_SHIFT = 0.5f;
     private static final int SHADOW_STEPS = 8;
 
     private final float dp;
@@ -158,8 +159,9 @@ public final class LcdPanel extends FrameLayout {
 
     @Override public void draw(Canvas c) {
         float w = getWidth(), h = getHeight();
-        if (lcd != null) lcd.setShiftX(raised ? -CONTENT_SHIFT * SHEAR * w / 2f : 0f);
         if (!raised) { super.draw(c); return; }
+        c.save();
+        c.translate(-PANEL_SHIFT * SHEAR * w, 0);
 
         // 1. the recess left behind in the body = the flat display's footprint
         float rt = ext;
@@ -206,6 +208,7 @@ public final class LcdPanel extends FrameLayout {
         c.save();
         c.concat(matrix);
         super.draw(c);
+        c.restore();
         c.restore();
     }
 }

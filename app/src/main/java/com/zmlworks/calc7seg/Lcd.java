@@ -155,7 +155,7 @@ final class Lcd {
     /** Digit block geometry. */
     static final class Digits {
         final float cellW, cellH, pitch, th, gap, signW, dpR, left, top, slant = 0.07f;
-        /** Main LCD: minus floats next to the number; the sign slot is a full 7-segment cell. */
+        /** Minus floats next to the number (main LCD; memory LCD since 0.9.6); the narrow sign slot only lights for 10-digit negatives. */
         final boolean floatSign;
 
         Digits(float right, float top, float cellW, float aspect, float thick) {
@@ -246,7 +246,7 @@ final class Lcd {
             this.width = width;
             pad = width * 0.045f;
             float cellW = (width - 2 * pad) / Digits.unitsWide();
-            d = new Digits(width - pad, pad, cellW, 1.95f, 0.25f);
+            d = new Digits(width - pad, pad, cellW, 1.95f, 0.25f, true);   // 0.9.6: minus floats next to the number, like the main LCD
             height = pad + d.cellH + pad;
         }
     }
@@ -284,7 +284,7 @@ final class Lcd {
     }
 
     private static void digits(Painter p, Frame f, Digits d) {
-        // narrow sign slot: a middle bar only. Memory: the minus; main LCD: only for 10-digit negatives
+        // narrow sign slot: a middle bar only. Floating sign (both LCDs since 0.9.6): lit only for 10-digit negatives
         boolean slotLit = d.floatSign ? f.signCell == -1 : f.neg;
         p.poly(segment(6, d.cellLeft(-1), d.top, d.signW, d.cellH, d.th, d.gap, d.slant), slotLit ? ON : GHOST);
         for (int i = 0; i < CELLS; i++) {
