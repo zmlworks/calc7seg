@@ -95,7 +95,10 @@ public final class LcdPanel extends FrameLayout {
 
     /** Room above the panel's flat position, minus a small gap to the view above; 0 if unknown. */
     private int room() {
-        if (!(getParent() instanceof android.view.ViewGroup) || !isLaidOut()) return 0;
+        // Do not use isLaidOut(): that flag is only set after onLayout() returns, so the
+        // first-layout restore (saved raised state) would always see room()==0 and stay at flat size.
+        if (!(getParent() instanceof android.view.ViewGroup)) return 0;
+        if (getWidth() == 0 && getHeight() == 0) return 0;
         android.view.ViewGroup p = (android.view.ViewGroup) getParent();
         int i = p.indexOfChild(this);
         int above = i > 0 ? p.getChildAt(i - 1).getBottom() : p.getPaddingTop();
